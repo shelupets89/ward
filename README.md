@@ -20,7 +20,7 @@ Menu-bar-only app (no Dock icon), inspired by [One Switch](https://fireball.stud
 **Building it yourself is the smoothest path**, and not just for developers: apps you build locally carry no quarantine flag, so macOS never shows a security warning. A downloaded copy does. Requires Xcode or the Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone <repo-url> && cd ward && bash scripts/make-app.sh && open dist/Ward.app
+git clone https://github.com/shelupets89/ward.git && cd ward && bash scripts/make-app.sh && open dist/Ward.app
 ```
 
 <details>
