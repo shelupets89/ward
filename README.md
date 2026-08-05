@@ -10,7 +10,23 @@ A macOS menu-bar utility for things macOS makes hard. No Dock icon, no window, n
 git clone https://github.com/shelupets89/ward.git && cd ward && bash scripts/make-app.sh && open dist/Ward.app
 ```
 
-**Or download** the [latest release](https://github.com/shelupets89/ward/releases/latest) — macOS will block it, because Ward isn't notarized. The bundled `INSTRUCTIONS.txt` explains how to get past that.
+**Or download** the [latest release](https://github.com/shelupets89/ward/releases/latest). macOS will refuse to open it — *"Apple could not verify Ward-x.y.z.dmg is free of malware"* — because Ward isn't notarized. That dialog offers only **Move to Trash** and **Done**; there's no Open button in it.
+
+To clear the quarantine flag:
+
+```bash
+xattr -rd com.apple.quarantine ~/Downloads/Ward-*.dmg
+```
+
+Same command for the app itself, if it's blocked again after you drag it to Applications:
+
+```bash
+xattr -rd com.apple.quarantine /Applications/Ward.app
+```
+
+Without a terminal: click **Done**, then System Settings → Privacy & Security → scroll to **Security** → **Open Anyway**.
+
+> Either route is you telling macOS to trust a file it can't verify. Reasonable for something you or a colleague built. Not a habit for downloads in general — and building from source above avoids the question entirely.
 
 > Launch the built `.app`, not `swift run` — macOS attaches permission grants to whatever launched the process.
 
