@@ -74,7 +74,7 @@ public final class KeepAwakeController: NSObject {
             return .awaitingConfirmation
         }
         if let session {
-            return .active(remainingTime: session.remaining(at: .now).formatted(.time(pattern: .hourMinute)))
+            return .active(remainingTime: RemainingTimeFormatting.formatHoursAndMinutes(session.remaining(at: .now)))
         }
         return LidSleepSetting.currentState.mayBeDisabled ? .unownedAndDisabled : .off
     }

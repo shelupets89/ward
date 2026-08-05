@@ -15,7 +15,7 @@ extension KeepScreenAwakeController: WardFeature {
         case .off:
             return [makeDurationSubmenuItem()]
         case .active(let remaining):
-            let remainingTime = remaining.formatted(.time(pattern: .hourMinute))
+            let remainingTime = RemainingTimeFormatting.formatHoursAndMinutes(remaining)
             return [makeItem(title: "Turn Off Keep Screen Awake (\(remainingTime) left)", action: #selector(stopFromMenu))]
         }
     }
