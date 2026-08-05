@@ -48,7 +48,7 @@ Launch the built `.app`, never `swift run` — TCC grants attach to whatever lau
 
 ## Environment facts (verified — don't re-derive)
 
-- `pmset` is at `/usr/bin/pmset`.
+- `pmset` is at `/usr/bin/pmset`. `lsof` is at `/usr/sbin/lsof`. Use absolute paths — these two are in *different* directories and guessing has already cost one silent-failure bug.
 - `pmset disablesleep` genuinely prevents clamshell sleep, verified against a control run that slept. Undocumented — re-verify with `lid-sleep-probe.sh` after macOS updates.
 - Power assertions and `caffeinate` do **not** cover lid-close sleep. Don't propose them as a fix for it.
 - No code-signing identity exists. Forces ad-hoc signing, re-granting Accessibility after rebuilds, blocks `SMAppService`. Several designs exist only because of this.
