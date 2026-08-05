@@ -70,13 +70,12 @@ enum SudoersRuleInstaller {
     }
 
     private static func presentFailureAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Ward couldn’t install the rule"
-        alert.informativeText = """
-        The authorization was declined, or the rule failed validation and was not written. Nothing \
-        was changed. Keep Awake still works — it will just ask for your password each time.
-        """
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        WardAlert.presentFailure(
+            messageText: "Ward couldn’t install the rule",
+            informativeText: """
+            The authorization was declined, or the rule failed validation and was not written. Nothing \
+            was changed. Keep Awake still works — it will just ask for your password each time.
+            """
+        )
     }
 }

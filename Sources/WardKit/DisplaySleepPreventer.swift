@@ -37,11 +37,21 @@ public final class DisplaySleepPreventer {
         return true
     }
 
-    public func endPreventingDisplaySleep() {
+    /// Returns false if the release was refused, in which case the assertion is
+    /// still held and the ID is **kept**. Forgetting it would look like success
+    /// to `beginPreventingDisplaySleep`, which would then create a second
+    /// assertion beside the live one — an orphan no session caps and no menu
+    /// can reach, lasting until the process exits.
+    @discardableResult
+    public func endPreventingDisplaySleep() -> Bool {
         guard let activeAssertionID else {
-            return
+            return true
         }
-        IOPMAssertionRelease(activeAssertionID)
+        let releaseResult = IOPMAssertionRelease(activeAssertionID)
+        guard releaseResult == kIOReturnSuccess else {
+            return false
+        }
         self.activeAssertionID = nil
+        return true
     }
 }

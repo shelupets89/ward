@@ -40,29 +40,37 @@ struct KeepScreenAwakeStateTests {
         #expect(state == .active(remaining: .seconds(1)))
     }
 
-    /// The expiry timer only samples every 30 seconds, so the menu must decide
-    /// this for itself rather than wait to be told the session ended.
-    @Test("Falls back to off exactly at the cap, without waiting for a sweep")
-    func isOffAtCap() {
+    /// A session that outlives its own cap has not ended — the assertion is
+    /// still held, because `stop()` only clears the session once the release
+    /// actually succeeds. Reporting `.off` here would darken the bolt and offer
+    /// the duration picker while the screen was still being forced awake.
+    @Test("Reports overrunning at the cap, not off — the assertion is still held")
+    func isOverrunningAtCap() {
         let state = KeepScreenAwakeState(
             session: makeHalfHourSession(),
             at: startInstant.advanced(by: .seconds(1800))
         )
-        #expect(state == .off)
+        #expect(state == .overrunning)
     }
 
-    @Test("Stays off well past the cap rather than reporting zero remaining")
-    func isOffPastCap() {
+    @Test("Stays overrunning well past the cap")
+    func isOverrunningPastCap() {
         let state = KeepScreenAwakeState(
             session: makeHalfHourSession(),
             at: startInstant.advanced(by: .seconds(99999))
         )
-        #expect(state == .off)
+        #expect(state == .overrunning)
     }
 
-    @Test("Every offered duration ends the session at its own cap", arguments: KeepAwakeDuration.allCases)
-    func everyOfferedDurationEndsAtItsCap(option: KeepAwakeDuration) {
+    @Test("Is off only when no session is held at all")
+    func isOffOnlyWithoutSession() {
+        #expect(KeepScreenAwakeState(session: nil, at: startInstant.advanced(by: .seconds(99999))) == .off)
+    }
+
+    @Test("Every offered duration overruns at its own cap", arguments: KeepAwakeDuration.allCases)
+    func everyOfferedDurationOverrunsAtItsCap(option: KeepAwakeDuration) {
         let session = KeepAwakeSession(startedAt: startInstant, duration: option.duration)
-        #expect(KeepScreenAwakeState(session: session, at: startInstant.advanced(by: option.duration)) == .off)
+        let atCap = KeepScreenAwakeState(session: session, at: startInstant.advanced(by: option.duration))
+        #expect(atCap == .overrunning)
     }
 }

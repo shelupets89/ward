@@ -13,32 +13,34 @@ extension KeepScreenAwakeController: WardFeature {
         endSessionIfExpired()
         switch state {
         case .off:
-            return [makeDurationSubmenuItem()]
+            return [
+                FeatureMenuItems.makeDurationSubmenu(
+                    title: "Keep Screen Awake",
+                    action: #selector(startFromMenu(_:)),
+                    target: self
+                )
+            ]
         case .active(let remaining):
-            let remainingTime = remaining.formatted(.time(pattern: .hourMinute))
-            return [makeItem(title: "Turn Off Keep Screen Awake (\(remainingTime) left)", action: #selector(stopFromMenu))]
+            let remainingTime = RemainingTimeFormatting.formatHoursAndMinutes(remaining)
+            return [
+                FeatureMenuItems.make(
+                    title: "Turn Off Keep Screen Awake (\(remainingTime) left)",
+                    action: #selector(stopFromMenu),
+                    target: self
+                )
+            ]
+        case .overrunning:
+            return [
+                FeatureMenuItems.make(
+                    title: "Turn Off Keep Screen Awake (macOS won’t release it)",
+                    action: #selector(stopFromMenu),
+                    target: self
+                )
+            ]
         }
     }
 
     public var isHoldingSystemState: Bool {
         return state != .off
-    }
-
-    private func makeDurationSubmenuItem() -> NSMenuItem {
-        let item = NSMenuItem(title: "Keep Screen Awake", action: nil, keyEquivalent: "")
-        let submenu = NSMenu()
-        KeepAwakeDuration.allCases.forEach { option in
-            let optionItem = makeItem(title: option.menuTitle, action: #selector(startFromMenu(_:)))
-            optionItem.representedObject = option
-            submenu.addItem(optionItem)
-        }
-        item.submenu = submenu
-        return item
-    }
-
-    private func makeItem(title: String, action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        return item
     }
 }
