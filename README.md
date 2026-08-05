@@ -42,7 +42,7 @@ Each feature explains its own permissions on first use. Cleaning Mode needs **Ac
 | --- | --- | --- |
 | [Cleaning Mode](Features/CleaningMode/README.md) | Black out displays + block input so you can wipe the screen | ✅ Shipped |
 | [Keep Awake, Lid Closed](Features/KeepAwakeLidClosed/README.md) | Keep working with the MacBook shut, for a capped stretch | ✅ Shipped |
-| [Keep Screen Awake](Features/KeepScreenAwake/README.md) | Stop the display sleeping, without moving your mouse | 📋 Planned |
+| [Keep Screen Awake](Features/KeepScreenAwake/README.md) | Stop the display sleeping, without moving your mouse | ✅ Shipped |
 | [Touch ID for sudo](Features/TouchIDForSudo/README.md) | One-click `pam_tid` — no UI for this exists anywhere | 📋 Planned |
 | [Stay Active](Features/StayActive/README.md) | Synthetic input to defeat app-level idle detection | 📋 Planned |
 | [Keep Awake Until Exit](Features/KeepAwakeUntilExit/README.md) | Stay awake while a build, process or port is alive | 📋 Planned |
@@ -66,7 +66,7 @@ log stream --predicate 'subsystem == "com.dimashelupets.ward"' --level info
 
 ```bash
 swift build
-swift test                  # 63 tests
+swift test                  # 70 tests
 bash scripts/coverage.sh    # Pure/ must stay ≥85%
 ```
 

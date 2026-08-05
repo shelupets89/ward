@@ -1,6 +1,7 @@
 import AppKit
 import CleaningMode
 import KeepAwakeLidClosed
+import KeepScreenAwake
 import WardKit
 
 /// Owns the status item and nothing else. Every menu entry above Quit comes
@@ -10,7 +11,8 @@ import WardKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let features: [any WardFeature] = [
         CleaningModeController(),
-        KeepAwakeController()
+        KeepAwakeController(),
+        KeepScreenAwakeController()
     ]
     private var statusItem: NSStatusItem?
 

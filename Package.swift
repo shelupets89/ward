@@ -38,9 +38,20 @@ let package = Package(
             path: "Features/KeepAwakeLidClosed/Tests"
         ),
 
+        .target(
+            name: "KeepScreenAwake",
+            dependencies: ["WardKit"],
+            path: "Features/KeepScreenAwake/Sources"
+        ),
+        .testTarget(
+            name: "KeepScreenAwakeTests",
+            dependencies: ["KeepScreenAwake"],
+            path: "Features/KeepScreenAwake/Tests"
+        ),
+
         .executableTarget(
             name: "Ward",
-            dependencies: ["WardKit", "CleaningMode", "KeepAwakeLidClosed"]
+            dependencies: ["WardKit", "CleaningMode", "KeepAwakeLidClosed", "KeepScreenAwake"]
         )
     ]
 )

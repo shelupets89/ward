@@ -1,14 +1,23 @@
 import IOKit.pwr_mgt
 
-/// Keeps the display awake while cleaning mode is active so the exit
-/// instructions stay visible. The assertion is released on exit and dies with
-/// the process either way.
+/// Holds a display-sleep assertion for as long as a feature needs one. The
+/// assertion is released explicitly and dies with the process either way.
+///
+/// `activeAssertionID` is per-instance, so two features each holding their own
+/// preventer hold two independent assertions and neither release can cancel the
+/// other's. Give every feature its own instance rather than sharing one.
 public final class DisplaySleepPreventer {
     private static let preventDisplaySleepAssertionType = "PreventUserIdleDisplaySleep" as CFString
 
+    /// Shown verbatim by `pmset -g assertions`, which is where anyone asking
+    /// "what is keeping this Mac awake?" looks — so it names the feature
+    /// holding it, not the app.
+    private let assertionName: String
     private var activeAssertionID: IOPMAssertionID?
 
-    public init() {}
+    public init(assertionName: String) {
+        self.assertionName = assertionName
+    }
 
     public func beginPreventingDisplaySleep() -> Bool {
         guard activeAssertionID == nil else {
@@ -18,7 +27,7 @@ public final class DisplaySleepPreventer {
         let creationResult = IOPMAssertionCreateWithName(
             Self.preventDisplaySleepAssertionType,
             IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "Ward cleaning session" as CFString,
+            assertionName as CFString,
             &createdAssertionID
         )
         guard creationResult == kIOReturnSuccess else {
