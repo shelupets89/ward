@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Ward has no package dependencies — this covers the one supply chain it does
+  # have: the third-party actions its workflows run.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "⬆️ chore(ci):"
+    labels:
+      - dependencies

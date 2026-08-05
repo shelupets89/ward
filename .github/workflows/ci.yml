@@ -6,6 +6,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege, declared explicitly rather than inherited from the repository
+# default. CI only ever needs to read the checkout.
+#
+# Note this is `pull_request`, never `pull_request_target`: fork PRs therefore
+# run with a read-only token and no access to secrets, even though the jobs
+# execute scripts from the PR's own branch.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

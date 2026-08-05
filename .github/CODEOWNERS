@@ -1,0 +1,20 @@
+# Every change needs owner review.
+* @shelupets89
+
+# Listed explicitly because a subtle change here is a privilege-escalation or
+# keystroke-interception bug, not a style nit. See SECURITY.md.
+/Sources/WardCore/ShellQuoting.swift   @shelupets89
+/Sources/WardCore/SudoersRule.swift    @shelupets89
+/Sources/Ward/PrivilegedShellRunner.swift @shelupets89
+/Sources/Ward/LidSleepSetting.swift    @shelupets89
+/Sources/Ward/InputBlocker.swift       @shelupets89
+/Sources/Ward/BoundedProcess.swift     @shelupets89
+
+# Tests that pin the invariants above — weakening them is how a bad change
+# would otherwise slip past CI.
+/Tests/WardCoreTests/ShellQuotingTests.swift @shelupets89
+/Tests/WardCoreTests/SudoersRuleTests.swift  @shelupets89
+
+# Runs with repository context.
+/.github/  @shelupets89
+/scripts/  @shelupets89
