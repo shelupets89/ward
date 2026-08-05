@@ -8,6 +8,8 @@
 	<string>Ward</string>
 	<key>CFBundleExecutable</key>
 	<string>Ward</string>
+	<key>CFBundleIconFile</key>
+	<string>Ward</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.dimashelupets.ward</string>
 	<key>CFBundleInfoDictionaryVersion</key>

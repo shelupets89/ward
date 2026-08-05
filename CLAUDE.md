@@ -41,6 +41,7 @@ The shell never learns what a feature does. If you're editing `AppDelegate` for 
 swift build && swift test
 bash scripts/coverage.sh
 bash scripts/make-app.sh            # → dist/Ward.app
+bash scripts/make-icon.sh           # → Support/Ward.icns (only when changing the icon)
 bash scripts/lid-sleep-probe.sh 90
 ```
 
