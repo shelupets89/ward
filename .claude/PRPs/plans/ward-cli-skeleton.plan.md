@@ -17,7 +17,7 @@ Ward's features are reachable only from a menu-bar app, and some of them (freein
 - **Complexity**: Medium
 - **Source PRD**: `.claude/PRPs/prds/homebrew-tap-and-cli.prd.md`
 - **PRD Phase**: Phase 1 — CLI skeleton
-- **Estimated Files**: 7 (5 create, 2 update)
+- **Estimated Files**: 8 (6 create, 2 update)
 
 > **Why Phase 1 and not Phase 0.** Phase 0 (formula spike) is a shell investigation — `brew audit`, install, upgrade, check whether Accessibility survives — with no code to plan. It is independent of this phase and should run in parallel. Its outcome can invalidate PRD Phase 4, not this one.
 
@@ -49,7 +49,7 @@ Ward's features are reachable only from a menu-bar app, and some of them (freein
 
 | Touchpoint | Before | After | Notes |
 |---|---|---|---|
-| Binary on `PATH` | none | `ward` | Product name ≠ target name — see GOTCHA in Task 1 |
+| Binary on `PATH` | none | `ward` | Requires renaming the app target — see Task 1 collision GOTCHA |
 | Menu-bar app | unchanged | unchanged | CLI is standalone; no IPC, no shared state |
 
 ---
@@ -61,8 +61,8 @@ Ward's features are reachable only from a menu-bar app, and some of them (freein
 | P0 | `Package.swift` | 41–56 | Exact target-block shape to copy; note there is **no `products:` section yet** |
 | P0 | `Sources/Ward/WardApp.swift` | all | The only existing `@main` entry point |
 | P0 | `Features/KeepScreenAwake/Sources/Pure/KeepScreenAwakeState.swift` | all | Newest `Pure/` type — doc-comment style, `Equatable, Sendable`, value semantics |
-| P0 | `Features/KeepScreenAwake/Tests/KeepScreenAwakeStateTests.swift` | 1–25 | Swift Testing style: `struct` suite, `@Test("sentence")`, `#expect` |
-| P1 | `Sources/WardKit/WardLogger.swift` | all | Logging categories; a new one is needed |
+| P0 | `Features/KeepScreenAwake/Tests/KeepScreenAwakeStateTests.swift` | 1–68 | Swift Testing style: `struct` suite, `@Test("sentence")`, `#expect` |
+| P1 | `Sources/WardKit/WardLogger.swift` | all | Logging conventions for later phases |
 | P1 | `Sources/WardKit/BoundedProcess.swift` | 11–19 | Subprocess API for later phases |
 | P2 | `CLAUDE.md` | all | `Pure/` rule, non-negotiables |
 | P2 | `SECURITY.md` | "Scope" section | States Ward has **no dependencies** — this plan preserves that |
@@ -116,7 +116,8 @@ Note: doc comment explains *why*, not what. `public`, `Equatable, Sendable`, no 
 
 ### TEST_STRUCTURE
 ```swift
-// SOURCE: Features/KeepScreenAwake/Tests/KeepScreenAwakeStateTests.swift:1-20
+// SOURCE: Features/KeepScreenAwake/Tests/KeepScreenAwakeStateTests.swift:1-18 (abridged;
+// the real suite has a makeHalfHourSession() helper at 10-12 and 7 tests, closing at 68)
 import Testing
 import WardKit
 @testable import KeepScreenAwake
@@ -170,6 +171,7 @@ enum WardApp {
 | `Sources/WardKit/Pure/WardVersion.swift` | CREATE | Single version constant shared by app and CLI |
 | `Tests/WardCLITests/CommandLineParserTests.swift` | CREATE | Parser contract |
 | `Tests/WardKitTests/WardVersionTests.swift` | CREATE | Asserts the constant matches `Support/Info.plist` |
+| `scripts/make-app.sh` | UPDATE | Copy source becomes `WardApp` after the target rename (Task 1) |
 
 ## NOT Building
 
@@ -183,15 +185,34 @@ enum WardApp {
 
 ## Step-by-Step Tasks
 
-### Task 1: Add the executable product and targets
+### Task 1: Rename the app's executable target, then add the CLI product
 
-- **ACTION**: Update `Package.swift`.
-- **IMPLEMENT**: Add a `products:` array (the manifest has none today) with `.executable(name: "ward", targets: ["WardCLI"])`. Add `.executableTarget(name: "WardCLI", dependencies: ["WardKit"])` and `.testTarget(name: "WardCLITests", dependencies: ["WardCLI"])`.
+> ⚠️ **This task is not "add one target". Read the collision GOTCHA before touching `Package.swift`.**
+
+- **ACTION**: Update `Package.swift` **and** `scripts/make-app.sh`.
+- **IMPLEMENT**:
+  1. Rename the existing app target `Ward` → `WardApp` (`Package.swift:52-55`), keeping its dependency list unchanged. Its source directory `Sources/Ward` may stay as-is via `path: "Sources/Ward"`.
+  2. In `scripts/make-app.sh`, the binary is copied from `"${BIN_PATH}/${APP_NAME}"` where `APP_NAME="Ward"` (line 6, line 17). Change the *source* of that copy to `WardApp` while the *destination* stays `Contents/MacOS/Ward` — `CFBundleExecutable` in `Support/Info.plist` says `Ward` and must keep saying it.
+  3. Add a `products:` array (the manifest has none today) with `.executable(name: "ward", targets: ["WardCLI"])`.
+  4. Add `.executableTarget(name: "WardCLI", dependencies: ["WardKit"])` and `.testTarget(name: "WardCLITests", dependencies: ["WardCLI"])`.
 - **MIRROR**: TARGET_DECLARATION.
 - **IMPORTS**: n/a.
-- **GOTCHA**: **The binary is named after the *product*, not the target.** Without the `products:` entry, `swift build` emits `WardCLI`, and the Homebrew formula in Phase 4 would install the wrong name. The target must stay `WardCLI` (Swift module names are conventionally capitalised) while the product is lowercase `ward`.
-- **GOTCHA**: `WardCLI` depends on `WardKit` only — **not** on any feature library in this phase. Adding feature deps now would couple the skeleton to work that hasn't landed.
-- **VALIDATE**: `swift build 2>&1 | grep -E "error:|Build complete"` then `ls "$(swift build --show-bin-path)/ward"`.
+- **GOTCHA — THE BUILD-BREAKING ONE**: **`ward` and `Ward` are the same path on a stock Mac.** macOS defaults to case-insensitive APFS (verified in this repo's own worktree: creating `CaseProbe.tmp` then `caseprobe.tmp` yields one file). Declaring a product `ward` while an executable target `Ward` still exists makes both resolve to the same binary path in `.build/debug/`, and the build dies with an unhelpful linker error that never mentions names:
+  ```
+  Undefined symbols for architecture arm64:
+    "_WardCLI_main", referenced from:
+        _main in command-line-aliases-file
+  ```
+  Renaming the app target to `WardApp` is what removes the collision. GitHub's `macos-15` runners use the same case-insensitive image, so CI will not save you.
+- **GOTCHA**: The binary is named after the **product**, not the target. Without the `products:` entry, `swift build` emits `WardCLI`, and the Phase 4 formula would install the wrong name.
+- **GOTCHA**: `WardCLI` depends on `WardKit` only — **not** on any feature library in this phase. Adding feature deps now couples the skeleton to work that hasn't landed.
+- **VALIDATE**:
+  ```bash
+  swift build 2>&1 | grep -E "error:|Build complete"
+  ls "$(swift build --show-bin-path)/ward" "$(swift build --show-bin-path)/WardApp"
+  bash scripts/make-app.sh && open dist/Ward.app && sleep 3 && pgrep -x Ward && killall Ward
+  ```
+  Both binaries must exist, and the app bundle must still launch — the rename is only safe if `make-app.sh` was updated in step 2.
 
 ### Task 2: Write the argument parser tests (RED)
 
@@ -267,14 +288,6 @@ enum WardApp {
 - **GOTCHA**: `exit(64)` is `EX_USAGE`; do not use `exit(1)` for a usage error.
 - **GOTCHA**: A file named `main.swift` in the same target conflicts with `@main`. Name it `WardCommandLine.swift`.
 - **VALIDATE**: `swift run ward --version` prints `ward 0.1.0`; `swift run ward --help` prints usage; `swift run ward bogus; echo $?` prints 64.
-
-### Task 7: Logging category
-
-- **ACTION**: Update `Sources/WardKit/WardLogger.swift`.
-- **IMPLEMENT**: Add `public static let commandLine = Logger(subsystem: "com.dimashelupets.ward", category: "command-line")`.
-- **MIRROR**: LOGGING_PATTERN.
-- **GOTCHA**: A CLI reports to stdout/stderr, not the unified log — this category is for later phases that hold assertions or spawn processes. Do not route usage errors through it.
-- **VALIDATE**: `swift build`.
 
 ---
 
@@ -366,11 +379,12 @@ EXPECT: menu-bar app unaffected.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
+| `ward` product collides with the `Ward` target on case-insensitive APFS | **Certain if unaddressed** | Build fails with an opaque linker error | Task 1 renames the app target to `WardApp`; VALIDATE asserts both binaries exist |
 | Binary named `WardCLI` instead of `ward` | **M** | Phase 4 formula installs wrong name | `products:` entry; validated by the Binary Name command |
 | Version constant drifts from `Info.plist` | **M** | CLI reports a stale version | Test asserts equality; `release.yml` already gates tags |
 | Pure logic placed outside `Pure/` | **M** | Silently unmeasured by the gate | Coverage command must list `Sources/WardCLI/Pure` |
 | Temptation to add swift-argument-parser | **M** | Invalidates the "no dependencies" claim in `SECURITY.md` | Explicit NOT-building item; hand-rolled parser is ~30 lines |
-| `ward` collides with another binary on `PATH` | **L** | Confusing shadowing | PRD open question; check `command -v ward` on a clean machine before Phase 4 |
+| `ward` collides with another binary on `PATH` | **L** | Confusing shadowing | Distinct from the build-time collision above; check `command -v ward` before Phase 4 |
 
 ## Notes
 

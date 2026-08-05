@@ -11,7 +11,7 @@ All observed directly on 2026-08-05, not assumed:
 - A teammate sent the v0.1.0 DMG received **"Apple could not verify Ward-0.1.0.dmg is free of malware"**, a dialog offering only *Move to Trash* and *Done* — no Open button.
 - `spctl -a -vv dist/Ward.app` → **`rejected`**. `Signature=adhoc`, `TeamIdentifier=not set`.
 - The install instructions shipped *inside* the DMG, which macOS blocks — so they were unreachable exactly when needed. Packaging bug, since fixed.
-- **`Rectangle.app`, installed via Homebrew Cask, carries the quarantine attribute.** It opens anyway because it is notarized. A cask of Ward would carry the same attribute and fail assessment.
+- **`Rectangle.app`, installed via Homebrew Cask, carries the quarantine attribute** — observed. It opens anyway because it is notarized. *Inference, not observation:* a Ward cask would carry the same attribute and, being unnotarized, fail assessment.
 - **A locally built `Ward.app` has no quarantine attribute at all** — verified with `xattr`. Compiling on the target machine sidesteps Gatekeeper rather than colliding with it.
 - Ports are the terminal case: `lsof` showed `ControlCenter` holding 5000/7000, and the "port already in use" problem is encountered *from* a shell.
 
@@ -52,7 +52,7 @@ We'll know we're right when a colleague runs `brew install shelupets89/ward/ward
 
 - [ ] Does `brew audit` accept a formula that installs a GUI `.app`? Formulae are conventionally CLI-only; casks own apps. **Needs a spike before committing to the approach.**
 - [ ] Where should the `.app` land — symlink into `/Applications`, or leave it in the Cellar and let the user link it? Affects whether TCC grants survive `brew upgrade`.
-- [ ] **Does the Accessibility grant survive a `brew upgrade` rebuild?** Ad-hoc signing already invalidates TCC on rebuild. If every upgrade forces re-granting Accessibility, that materially weakens the value.
+- [ ] **How bad is the Accessibility re-grant after `brew upgrade`?** Not *whether* — `CLAUDE.md` already records ad-hoc rebuilds invalidating TCC as verified, and there is no mechanism by which `brew` would differ. The open question is whether it is painful enough to sink the approach.
 - [ ] Should the tap live in a second repo (`homebrew-ward`) or can it be a directory in this one? Homebrew expects `homebrew-<name>` as a repo name.
 - [ ] Is `ward` a safe binary name, or does it collide with something in common `PATH`s?
 
@@ -111,7 +111,7 @@ brew upgrade ward             # self-update
 **Feasibility**: **HIGH** for the CLI, **MEDIUM** for the formula.
 
 **Architecture Notes**
-- Feature code already lives in per-feature library targets (`CleaningMode`, `KeepAwakeLidClosed`, `KeepScreenAwake`), each depending on `WardKit`. The CLI is one more `.executableTarget` on those same libraries — no restructuring.
+- Feature code already lives in per-feature library targets (`CleaningMode`, `KeepAwakeLidClosed`, `KeepScreenAwake`), each depending on `WardKit`. The CLI is one more `.executableTarget` on those same libraries. **One restructuring is unavoidable**: a `ward` product collides with the existing `Ward` app target on case-insensitive APFS, so the app target is renamed to `WardApp` (bundle executable stays `Ward`). Verified by reproduction, not assumed.
 - The recently shipped `KeepScreenAwake` confirmed the "two targets and one line" claim, so the pattern is proven rather than theoretical.
 - The CLI is standalone: it holds its own assertions and runs its own subprocesses. No shared state with the app, no IPC.
 - `ward until <cmd>` should be **built CLI-first**, because wrapping a command is strictly simpler than the polling/PID-matching design specced for the menu-bar version.
@@ -121,7 +121,7 @@ brew upgrade ward             # self-update
 | Risk | Likelihood | Mitigation |
 |------|------------|------------|
 | `brew audit` rejects a formula shipping a `.app` | **M** | Spike first (open question 1). Fallback: formula installs only the `ward` CLI; app stays a manual/DMG install |
-| Accessibility re-grant required after every `brew upgrade` | **M** | Test explicitly. If confirmed, document it loudly — it may make upgrades painful enough to reconsider |
+| Accessibility re-grant required after every `brew upgrade` | **H — near-certain** | `CLAUDE.md` already records ad-hoc rebuilds invalidating TCC as verified, and `brew upgrade` recompiles and re-signs the same way. Phase 0 confirms the magnitude, not the existence. If upgrades are this painful, reconsider the whole formula approach |
 | Xcode CLT missing on target machine | **H** | Formula declares the dependency; `brew` surfaces it before building |
 | Formula drifts behind releases | **M** | Automate the version bump from the release workflow |
 | Users read "installs from source" as slower/riskier | **L** | README explains it is *safer* here, with the quarantine evidence |
@@ -143,12 +143,12 @@ brew upgrade ward             # self-update
 
 **Phase 0: Formula spike**
 - **Goal**: Kill the approach early if Homebrew won't accept it.
-- **Scope**: A throwaway local formula; run `brew audit`; install, upgrade, check whether Accessibility survives.
+- **Scope**: A throwaway local formula; run `brew audit`; install, upgrade, measure the Accessibility re-grant cost, and settle where the `.app` should land (Cellar vs `/Applications` symlink — open question 2).
 - **Success signal**: A clear yes/no on both open questions. A "no" redirects Phase 4 to CLI-only.
 
 **Phase 1: CLI skeleton**
 - **Goal**: Prove an executable target composes with the feature libraries.
-- **Scope**: Target, argument parsing, `--version` reading `CFBundleShortVersionString`, `--help`.
+- **Scope**: Target, argument parsing, `--help`, and `--version` from a shared `WardVersion` constant — a CLI binary has no `Bundle.main` plist to read, so a test keeps the constant honest against `Info.plist`.
 - **Success signal**: `swift run ward --version` prints the version; `Pure/` coverage gate still passes.
 
 **Phase 2: `ward until <cmd>`**
