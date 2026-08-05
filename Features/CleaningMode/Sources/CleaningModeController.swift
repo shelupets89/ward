@@ -219,7 +219,7 @@ public final class CleaningModeController: NSObject {
     }
 
     private func presentShieldFailureAlert() {
-WardAlert.presentFailure(
+        WardAlert.presentFailure(
             messageText: "Ward can’t cover the screen",
             informativeText: """
             macOS reported no available displays, so cleaning mode was not started. Try again in a moment.

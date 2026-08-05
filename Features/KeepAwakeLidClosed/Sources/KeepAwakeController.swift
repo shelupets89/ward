@@ -206,7 +206,6 @@ public final class KeepAwakeController: NSObject {
         )
     }
 
-
     private func expireSessionIfElapsed() {
         guard let session, session.isExpired(at: .now) else {
             return
@@ -229,6 +228,5 @@ public final class KeepAwakeController: NSObject {
             """
         )
     }
-
 
 }

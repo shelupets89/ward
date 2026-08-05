@@ -70,7 +70,7 @@ enum SudoersRuleInstaller {
     }
 
     private static func presentFailureAlert() {
-WardAlert.presentFailure(
+        WardAlert.presentFailure(
             messageText: "Ward couldn’t install the rule",
             informativeText: """
             The authorization was declined, or the rule failed validation and was not written. Nothing \

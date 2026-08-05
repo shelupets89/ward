@@ -29,6 +29,14 @@ extension KeepScreenAwakeController: WardFeature {
                     target: self
                 )
             ]
+        case .overrunning:
+            return [
+                FeatureMenuItems.make(
+                    title: "Turn Off Keep Screen Awake (macOS won’t release it)",
+                    action: #selector(stopFromMenu),
+                    target: self
+                )
+            ]
         }
     }
 

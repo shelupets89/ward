@@ -1,9 +1,6 @@
 import Testing
 @testable import WardKit
 
-/// The reason this exists rather than `Duration.formatted(.time(pattern:))`:
-/// that style rounds to the nearest minute, so a session with 29 seconds left
-/// rendered "0:00" while the assertion was still held.
 struct RemainingTimeFormattingTests {
     @Test(
         "Rounds up, so any time left reads as at least a minute",
@@ -45,7 +42,6 @@ struct RemainingTimeFormattingTests {
         #expect(RemainingTimeFormatting.formatHoursAndMinutes(option.duration) == expectedText)
     }
 
-    /// Only an ended session may read "0:00" — this is the one input allowed to.
     @Test("Reads zero only when nothing is left")
     func readsZeroWhenNothingIsLeft() {
         #expect(RemainingTimeFormatting.formatHoursAndMinutes(.zero) == "0:00")

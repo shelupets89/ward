@@ -67,9 +67,13 @@ public final class KeepScreenAwakeController: NSObject {
     }
 
     /// Releases first and only then forgets the session, so a refused release
-    /// leaves the timer running to retry and the menu still showing an active
-    /// session — which is the truth. Tearing down first would report "off"
-    /// while the screen was still held awake.
+    /// leaves the timer retrying and the menu still offering to turn it off —
+    /// which is the truth. Tearing down first would report "off" while the
+    /// screen was still held awake.
+    ///
+    /// A session therefore outlives its own cap when the OS refuses to let go.
+    /// That is what `KeepScreenAwakeState.overrunning` exists to show; treating
+    /// the cap alone as "ended" is what made an earlier version lie.
     @discardableResult
     func stop() -> Bool {
         guard session != nil else {

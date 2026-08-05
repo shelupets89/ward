@@ -11,7 +11,7 @@ enum SecureInputDetector {
     }
 
     static func presentSecureInputBlockedAlert() {
-WardAlert.presentFailure(
+        WardAlert.presentFailure(
             messageText: "Another app is capturing secure input",
             informativeText: """
             A password field (or another app using secure keyboard entry) is active, so Ward \
