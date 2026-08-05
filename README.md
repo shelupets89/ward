@@ -47,7 +47,7 @@ Each feature explains its own permissions on first use. Cleaning Mode needs **Ac
 | [Stay Active](Features/StayActive/README.md) | Synthetic input to defeat app-level idle detection | 📋 Planned |
 | [Keep Awake Until Exit](Features/KeepAwakeUntilExit/README.md) | Stay awake while a build, process or port is alive | 📋 Planned |
 | [Sleep Inspector](Features/SleepInspector/README.md) | Answers "what's keeping my Mac awake?" | 📋 Planned |
-| [Free a Port](Features/FreePort/README.md) | Kill whatever is holding port 3001, with a look before you leap | 📋 Planned |
+| [Free a Port](Features/FreePort/README.md) | Kill whatever is holding port 3001, with a look before you leap | ✅ Shipped |
 
 ## Troubleshooting
 
@@ -58,6 +58,7 @@ Each feature explains its own permissions on first use. Cleaning Mode needs **Ac
 | Stopped working after a rebuild | Ad-hoc signing makes each build a new app — re-add it in Accessibility |
 | Stuck in Cleaning Mode | `killall Ward` over SSH, or hold the power button |
 | Mac won't sleep | Menu → **Restore Normal Sleep**. By hand: `sudo pmset -a disablesleep 0` |
+| "Port N belongs to another user" | Ward only stops your own processes. Free it yourself: `sudo lsof -ti tcp:N \| xargs sudo kill` |
 
 ```bash
 log stream --predicate 'subsystem == "com.dimashelupets.ward"' --level info
@@ -67,7 +68,7 @@ log stream --predicate 'subsystem == "com.dimashelupets.ward"' --level info
 
 ```bash
 swift build
-swift test                  # 85 tests
+swift test                  # 128 tests
 bash scripts/coverage.sh    # Pure/ must stay ≥85%
 ```
 

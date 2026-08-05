@@ -1,5 +1,6 @@
 import AppKit
 import CleaningMode
+import FreePort
 import KeepAwakeLidClosed
 import KeepScreenAwake
 import WardKit
@@ -12,7 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let features: [any WardFeature] = [
         CleaningModeController(),
         KeepAwakeController(),
-        KeepScreenAwakeController()
+        KeepScreenAwakeController(),
+        FreePortController()
     ]
     private var statusItem: NSStatusItem?
 
