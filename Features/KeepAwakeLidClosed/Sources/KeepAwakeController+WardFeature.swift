@@ -53,15 +53,11 @@ extension KeepAwakeController: WardFeature {
     }
 
     private func makeDurationSubmenuItem() -> NSMenuItem {
-        let item = NSMenuItem(title: "Keep Awake with Lid Closed", action: nil, keyEquivalent: "")
-        let submenu = NSMenu()
-        KeepAwakeDuration.allCases.forEach { option in
-            let optionItem = makeItem(title: option.menuTitle, action: #selector(startFromMenu(_:)))
-            optionItem.representedObject = option
-            submenu.addItem(optionItem)
-        }
-        item.submenu = submenu
-        return item
+        return FeatureMenuItems.makeDurationSubmenu(
+            title: "Keep Awake with Lid Closed",
+            action: #selector(startFromMenu(_:)),
+            target: self
+        )
     }
 
     private func makePasswordlessSetupItemIfNeeded() -> [NSMenuItem] {
@@ -72,8 +68,6 @@ extension KeepAwakeController: WardFeature {
     }
 
     private func makeItem(title: String, action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        return item
+        return FeatureMenuItems.make(title: title, action: action, target: self)
     }
 }

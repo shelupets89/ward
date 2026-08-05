@@ -29,6 +29,6 @@ New pure logic is minimal; the cap and expiry are `KeepAwakeSession`, already co
 
 | Test | Asserts |
 | --- | --- |
-| `KeepScreenAwakeStateTests` | Menu state derives from the session: off → durations offered; active → remaining time; expired → back to off |
+| `KeepScreenAwakeStateTests` | Menu state derives from the session: no session → durations offered; within the cap → remaining time; past the cap → still held, because only a successful release ends a session |
 
 Write these before the controller. Manual check: start a 30-minute session, confirm `pmset -g assertions` lists a `PreventUserIdleDisplaySleep` entry owned by Ward, then confirm it disappears on toggle-off.
