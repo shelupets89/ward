@@ -1,10 +1,14 @@
-/// A bounded stretch of "stay awake with the lid closed".
+/// A bounded stretch of staying awake.
 ///
-/// Every session carries a deadline. Disabling lid sleep changes persistent
-/// system state that outlives this process, so an open-ended session would mean
-/// a forgotten laptop cooking in a bag — the cap is the safety feature, not a
-/// convenience. Timing uses `ContinuousClock` for the same reason the exit
-/// gesture does: a wall-clock jump must not shorten or extend it.
+/// Every session carries a deadline, but the cap means different things to its
+/// two users, and conflating them would be dangerous. For lid-closed keep-awake
+/// it is a genuine safety feature: that one disables a system setting outliving
+/// this process, so an open-ended session means a forgotten laptop cooking in a
+/// bag. For screen keep-awake it is only predictability — a power assertion
+/// dies with the process, so overrunning costs nothing.
+///
+/// Timing uses `ContinuousClock` for the same reason the exit gesture does: a
+/// wall-clock jump must not shorten or extend it.
 public struct KeepAwakeSession: Equatable, Sendable {
     public let startedAt: ContinuousClock.Instant
     public let duration: Duration

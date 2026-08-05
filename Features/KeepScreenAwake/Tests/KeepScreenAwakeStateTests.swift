@@ -40,8 +40,6 @@ struct KeepScreenAwakeStateTests {
         #expect(state == .active(remaining: .seconds(1)))
     }
 
-    /// The expiry timer only samples every 30 seconds, so the menu must decide
-    /// this for itself rather than wait to be told the session ended.
     @Test("Falls back to off exactly at the cap, without waiting for a sweep")
     func isOffAtCap() {
         let state = KeepScreenAwakeState(
