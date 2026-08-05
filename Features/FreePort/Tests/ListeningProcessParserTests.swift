@@ -121,4 +121,10 @@ struct ListeningProcessParserTests {
         let establishedRow = "node      26036 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3001 (ESTABLISHED)"
         #expect(ListeningProcessParser.parse(establishedRow).isEmpty)
     }
+
+    @Test("Skips a row with no state column at all, not just one with the wrong state")
+    func skipsRowMissingTheStateColumn() {
+        let rowWithoutState = "node      26036 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3001"
+        #expect(ListeningProcessParser.parse(rowWithoutState).isEmpty)
+    }
 }

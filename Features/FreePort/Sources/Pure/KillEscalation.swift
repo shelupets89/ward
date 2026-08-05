@@ -30,7 +30,14 @@ public enum KillEscalation {
         /// which without root is the usual case for a port owned by root.
         case heldByAnotherUser(visibleHolders: [ListeningProcess])
         case freed
+        /// Processes that were signalled and are still there.
         case stillHeld([ListeningProcess])
+        /// The approved processes are gone, but something that was never
+        /// signalled is on the port now — typically a supervisor restarting the
+        /// server inside the grace period. Kept apart from `stillHeld` because
+        /// saying these "survived SIGKILL" would be a plain lie: Ward never sent
+        /// them anything.
+        case takenByAnotherProcess([ListeningProcess])
     }
 
     public static func nextStep(stage: Stage, snapshot: PortSnapshot, currentUser: String) -> Step {
@@ -47,7 +54,11 @@ public enum KillEscalation {
         case .afterTermination:
             return .forceKill(targets)
         case .afterForceKill:
-            return .report(.stillHeld(snapshot.holders))
+            // Only the pids actually signalled can be said to have survived. A
+            // stranger that appeared during the settling window is reported by
+            // the branch above, under its own outcome.
+            let signalledTargets = Set(targets)
+            return .report(.stillHeld(snapshot.holders.filter { signalledTargets.contains($0.processIdentifier) }))
         }
     }
 
@@ -91,13 +102,16 @@ public enum KillEscalation {
         }
     }
 
+    /// Reached only when nothing on the port may be signalled — either it all
+    /// belongs to someone else, or it is this user's but was never approved.
+    /// Neither has been sent a signal, so neither may be reported as surviving one.
     private static func outcomeWithNothingToSignal(
         holders: [ListeningProcess],
         currentUser: String
     ) -> Outcome {
         let isEveryHolderAnotherUsers = holders.allSatisfy { $0.user != currentUser }
         guard isEveryHolderAnotherUsers else {
-            return .stillHeld(holders)
+            return .takenByAnotherProcess(holders)
         }
         return .heldByAnotherUser(visibleHolders: holders)
     }

@@ -109,7 +109,44 @@ struct KillEscalationTests {
     func neverForceKillsAnUnapprovedProcess() {
         let squatter = ownedProcess(command: "python3", pid: 55555)
         let step = nextStep(stage: .afterTermination(approvedTargets: [26036]), snapshot: snapshot([squatter]))
-        #expect(step == .report(.stillHeld([squatter])))
+        #expect(step == .report(.takenByAnotherProcess([squatter])))
+    }
+
+    @Test("Force-kills the approved survivor and leaves an unapproved squatter beside it")
+    func forceKillsOnlyTheApprovedSurvivorAmongMixedHolders() {
+        let approvedSurvivor = ownedProcess(pid: 26036)
+        let squatter = ownedProcess(command: "python3", pid: 55555)
+        let step = nextStep(
+            stage: .afterTermination(approvedTargets: [26036]),
+            snapshot: snapshot([approvedSurvivor, squatter])
+        )
+        #expect(step == .forceKill([26036]))
+    }
+
+    @Test("Does not describe a never-signalled process as having survived a signal")
+    func distinguishesASquatterFromASurvivor() {
+        let squatter = ownedProcess(command: "python3", pid: 55555)
+        let afterTermination = nextStep(
+            stage: .afterTermination(approvedTargets: [26036]),
+            snapshot: snapshot([squatter])
+        )
+        let afterForceKill = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036]),
+            snapshot: snapshot([squatter])
+        )
+        #expect(afterTermination == .report(.takenByAnotherProcess([squatter])))
+        #expect(afterForceKill == .report(.takenByAnotherProcess([squatter])))
+    }
+
+    @Test("Reports only the signalled pids as survivors, not a stranger that arrived late")
+    func reportsOnlySignalledPidsAsSurvivors() {
+        let survivor = ownedProcess(pid: 26036)
+        let lateArrival = ownedProcess(command: "python3", pid: 55555)
+        let step = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036]),
+            snapshot: snapshot([survivor, lateArrival])
+        )
+        #expect(step == .report(.stillHeld([survivor])))
     }
 
     @Test("Reports rather than escalating when only another user's process survives")
@@ -139,12 +176,9 @@ struct KillEscalationTests {
 
     @Test("Never escalates past SIGKILL")
     func neverEscalatesPastForceKill() {
-        let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036]),
-            snapshot: snapshot([ownedProcess(pid: 26036)])
-        )
-        #expect(step != .forceKill([26036]))
-        #expect(step != .terminate([26036]))
+        let survivor = ownedProcess(pid: 26036)
+        let step = nextStep(stage: .afterForceKill(approvedTargets: [26036]), snapshot: snapshot([survivor]))
+        #expect(step == .report(.stillHeld([survivor])))
     }
 
     @Test("Treats a process that vanished on its own as success, not as an error")

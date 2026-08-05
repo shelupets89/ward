@@ -90,6 +90,31 @@ struct FreePortMessagesTests {
         #expect(text.body.contains("SIGKILL"))
     }
 
+    @Test("Never claims a process survived a signal Ward did not send it")
+    func doesNotClaimAnUnsignalledProcessSurvived() {
+        let text = FreePortMessages.outcome(.takenByAnotherProcess([worker]), port: 3001)
+        #expect(text.body.contains("python3 (pid 26037)"))
+        #expect(!text.body.contains("SIGKILL"))
+        #expect(!text.body.contains("survived"))
+        #expect(text.body.contains("did not signal"))
+    }
+
+    @Test("Agrees in number when several processes survive or several take the port")
+    func outcomeTextAgreesInNumber() {
+        let survivors = FreePortMessages.outcome(.stillHeld([server, worker]), port: 3001)
+        let squatters = FreePortMessages.outcome(.takenByAnotherProcess([server, worker]), port: 3001)
+        #expect(survivors.body.contains("They survived"))
+        #expect(squatters.body.contains("did not signal them"))
+        #expect(squatters.body.contains("they were not in the list"))
+    }
+
+    @Test("Says a signal already went out when the verifying read fails")
+    func reportsAnUnverifiablePortHonestly() {
+        let text = FreePortMessages.unverifiablePort(3001)
+        #expect(text.body.contains("already signalled"))
+        #expect(!text.body.contains("Nothing on this Mac was changed"))
+    }
+
     // MARK: - Refusals
 
     @Test("Says nothing was changed when the port could not be read")

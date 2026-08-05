@@ -45,7 +45,41 @@ public enum FreePortMessages {
                 title: "Nothing is using port \(port)",
                 body: "No process is listening on port \(port), so there was nothing to stop."
             )
-        case .heldByAnotherUser(let visibleHolders) where visibleHolders.isEmpty:
+        case .heldByAnotherUser(let visibleHolders):
+            return anotherUsersPort(port, visibleHolders: visibleHolders)
+        case .stillHeld(let holders):
+            return AlertText(
+                title: "Port \(port) is still in use",
+                body: """
+                Port \(port) is still held by:
+
+                \(list(holders))
+                \(holders.count == 1 ? "It" : "They") survived both SIGTERM and SIGKILL.
+                """
+            )
+        case .takenByAnotherProcess(let holders):
+            return AlertText(
+                title: "Port \(port) is in use again",
+                body: """
+                What you approved is gone, but port \(port) is now held by:
+
+                \(list(holders))
+                Ward did not signal \(holders.count == 1 ? "it" : "them") — \
+                \(holders.count == 1 ? "it was" : "they were") not in the list you approved. \
+                Something is probably restarting the server. Try again to stop what is there now.
+                """
+            )
+        }
+    }
+
+    /// Branches on emptiness inside one case rather than across two `where`
+    /// clauses: an "unknown holder" reported as an empty list of known holders
+    /// is a message with a heading and nothing under it.
+    private static func anotherUsersPort(
+        _ port: UInt16,
+        visibleHolders: [ListeningProcess]
+    ) -> AlertText {
+        guard !visibleHolders.isEmpty else {
             return AlertText(
                 title: "Port \(port) belongs to another user",
                 body: """
@@ -54,35 +88,38 @@ public enum FreePortMessages {
                 cannot see which process this is. Free it from a terminal if you are sure.
                 """
             )
-        case .heldByAnotherUser(let visibleHolders):
-            return AlertText(
-                title: "Port \(port) belongs to another user",
-                body: """
-                Port \(port) is held by:
-
-                \(list(visibleHolders))
-                Ward only ever stops processes you own, so nothing was signalled.
-                """
-            )
-        case .stillHeld(let holders):
-            return AlertText(
-                title: "Port \(port) is still in use",
-                body: """
-                Port \(port) is still held by:
-
-                \(list(holders))
-                It survived both SIGTERM and SIGKILL.
-                """
-            )
         }
+        return AlertText(
+            title: "Port \(port) belongs to another user",
+            body: """
+            Port \(port) is held by:
+
+            \(list(visibleHolders))
+            Ward only ever stops processes you own, so nothing was signalled.
+            """
+        )
     }
 
+    /// Only for a read that failed *before* anything was signalled. Once a
+    /// signal has gone out, "nothing was changed" is no longer true — use
+    /// `unverifiablePort` instead.
     public static func unreadablePort(_ port: UInt16) -> AlertText {
         return AlertText(
             title: "Ward couldn’t check port \(port)",
             body: """
             Reading which processes hold port \(port) failed, so nothing was stopped. \
             Nothing on this Mac was changed.
+            """
+        )
+    }
+
+    public static func unverifiablePort(_ port: UInt16) -> AlertText {
+        return AlertText(
+            title: "Ward couldn’t confirm port \(port)",
+            body: """
+            Ward already signalled the processes you approved, but then failed to re-read \
+            port \(port) — so it cannot say whether they stopped. Assume they may have. \
+            Check the port before starting anything on it.
             """
         )
     }

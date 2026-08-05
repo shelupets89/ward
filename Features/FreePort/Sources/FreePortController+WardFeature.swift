@@ -31,13 +31,27 @@ extension FreePortController: WardFeature {
 }
 
 extension FreePortController: NSMenuDelegate {
+    /// Fills the submenu after the fact rather than blocking here. `lsof` goes
+    /// through `BoundedProcess`, which blocks its thread for up to ten seconds —
+    /// on the main thread that is the whole app frozen, and this menu is opened
+    /// out of curiosity. The placeholder is replaced in place once the read
+    /// returns; an `NSMenu` accepts items while it is open.
     public func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let listeners = listeningProcesses()
+        menu.addItem(makeDisabledItem(titled: "Reading…"))
+        Task {
+            fill(menu, with: await listeningProcesses())
+        }
+    }
+
+    private func fill(_ menu: NSMenu, with listeners: [ListeningProcess]?) {
+        menu.removeAllItems()
+        guard let listeners else {
+            menu.addItem(makeDisabledItem(titled: "Couldn’t read the port list"))
+            return
+        }
         guard !listeners.isEmpty else {
-            let emptyItem = NSMenuItem(title: "Nothing is listening", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
+            menu.addItem(makeDisabledItem(titled: "Nothing is listening"))
             return
         }
         listeners.forEach { listener in
@@ -48,5 +62,11 @@ extension FreePortController: NSMenuDelegate {
             item.representedObject = listener.port
             menu.addItem(item)
         }
+    }
+
+    private func makeDisabledItem(titled title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
     }
 }

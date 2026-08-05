@@ -14,7 +14,6 @@ public enum ListeningProcessParser {
     private static let processIdentifierFieldIndex = 1
     private static let userFieldIndex = 2
     private static let addressFieldIndex = 8
-    private static let stateFieldIndex = 9
 
     public static func parse(_ lsofOutput: String) -> [ListeningProcess] {
         let rows = lsofOutput.split(separator: "\n").compactMap(makeProcess(fromRow:))
@@ -24,12 +23,13 @@ public enum ListeningProcessParser {
 
     private static func makeProcess(fromRow row: Substring) -> ListeningProcess? {
         let fields = row.split(whereSeparator: \.isWhitespace)
-        guard fields.count > addressFieldIndex else {
-            return nil
-        }
-        // `-sTCP:LISTEN` means every row should already be a listener; the check
-        // is here so a row that somehow is not can never reach the kill list.
-        guard fields.count <= stateFieldIndex || fields[stateFieldIndex] == listenStateMarker else {
+        // `-sTCP:LISTEN` means every row should already be a listener, and the
+        // state is the last column. Requiring it *present* rather than merely
+        // not-contradictory is the point: a truncated row that stops before the
+        // state must not inherit "listening" by omission and reach the kill list.
+        guard fields.count > addressFieldIndex,
+              let state = fields.last,
+              state == listenStateMarker else {
             return nil
         }
         // The header row fails here on "PID", which is why it needs no special case.

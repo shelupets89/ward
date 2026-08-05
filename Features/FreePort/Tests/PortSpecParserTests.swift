@@ -33,4 +33,15 @@ struct PortSpecParserTests {
     func rejectsNonPorts(spec: String) {
         #expect(PortSpecParser.parse(spec) == nil)
     }
+
+    /// Unicode calls these digits; `kill` does not. Confusable numerals are the
+    /// one class of input worth naming for the only free-text route into an
+    /// irreversible action.
+    @Test(
+        "Rejects non-ASCII numerals",
+        arguments: ["\u{FF13}\u{FF10}\u{FF10}\u{FF11}", "\u{0663}\u{0660}\u{0660}\u{0661}", "\u{00B2}"]
+    )
+    func rejectsNonASCIINumerals(spec: String) {
+        #expect(PortSpecParser.parse(spec) == nil)
+    }
 }

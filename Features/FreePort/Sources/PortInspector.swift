@@ -19,28 +19,32 @@ enum PortInspector {
     /// folded into "nothing is listening": the caller is about to tell the user
     /// something definite about a port, and a failed check is not an answer.
     static func snapshot(ofPort port: UInt16) -> PortSnapshot? {
-        guard let isOccupied = isPortOccupied(port) else {
+        guard let isOccupied = isPortOccupied(port),
+              let holders = parseListeners(matching: "-iTCP:\(port)") else {
             return nil
         }
-        return PortSnapshot(holders: holders(ofPort: port), isOccupied: isOccupied)
+        return PortSnapshot(holders: holders, isOccupied: isOccupied)
     }
 
-    static func allListeningProcesses() -> [ListeningProcess] {
+    static func allListeningProcesses() -> [ListeningProcess]? {
         return parseListeners(matching: "-iTCP")
     }
 
-    private static func holders(ofPort port: UInt16) -> [ListeningProcess] {
-        return parseListeners(matching: "-iTCP:\(port)")
-    }
-
-    /// A non-zero exit is how `lsof` says "nothing matched", so the exit status
-    /// is ignored and the absence of parsable rows is the answer.
-    private static func parseListeners(matching networkFilter: String) -> [ListeningProcess] {
+    /// `nil` only when `lsof` never ran. A non-zero exit from a run that
+    /// completed is how `lsof` says "nothing matched" — that is an empty list,
+    /// not a failure, and the two must not collapse into each other. Treating a
+    /// failed check as an empty one would report a port the user owns as
+    /// belonging to somebody else.
+    private static func parseListeners(matching networkFilter: String) -> [ListeningProcess]? {
         let outcome = BoundedProcess.run(
             executablePath: lsofPath,
             arguments: lsofListenerArguments + [networkFilter],
             capturesOutput: true
         )
+        guard outcome.didRun else {
+            WardLogger.freePort.error("lsof did not run for \(networkFilter, privacy: .public).")
+            return nil
+        }
         return ListeningProcessParser.parse(outcome.standardOutput)
     }
 
@@ -51,7 +55,7 @@ enum PortInspector {
             capturesOutput: true
         )
         // netstat always has something to say, so silence means it never ran.
-        guard outcome.didSucceed, !outcome.standardOutput.isEmpty else {
+        guard outcome.didRun, outcome.didSucceed, !outcome.standardOutput.isEmpty else {
             WardLogger.freePort.error("netstat gave no output; port occupancy is unknown.")
             return nil
         }
