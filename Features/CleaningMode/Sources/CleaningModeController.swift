@@ -20,7 +20,7 @@ public final class CleaningModeController: NSObject {
     private let overlayModel = ShieldOverlayModel(
         requiredHoldSeconds: CleaningModeController.requiredHoldSeconds
     )
-    private let displaySleepPreventer = DisplaySleepPreventer()
+    private let displaySleepPreventer = DisplaySleepPreventer(assertionName: "Ward cleaning session")
     private var holdTracker = EscapeHoldTracker(
         requiredHoldDuration: .seconds(CleaningModeController.requiredHoldSeconds)
     )
