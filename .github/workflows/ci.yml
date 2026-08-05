@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & test
+    # Swift Testing (`import Testing`) ships with the Swift 6 toolchain, so this
+    # needs an Xcode 16+ image. The guard below fails loudly if that changes.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Require Swift 6+ for Swift Testing
+        run: |
+          SWIFT_MAJOR="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9]*\).*/\1/p' | head -1)"
+          if [ -z "${SWIFT_MAJOR}" ] || [ "${SWIFT_MAJOR}" -lt 6 ]; then
+            echo "::error::Swift 6+ required (Tests use the Swift Testing framework); found: $(swift --version 2>&1 | head -1)"
+            exit 1
+          fi
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+      - name: Coverage gate (WardCore)
+        run: bash scripts/coverage.sh 85
+
+  package:
+    name: Package app
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Proves the release path still works on every change — a broken
+      # make-app.sh should not be discovered at tag time.
+      - name: Build .app bundle
+        run: bash scripts/make-app.sh
+
+      - name: Verify bundle identity
+        run: |
+          codesign --verify --deep --strict dist/Ward.app
+          ACTUAL_ID="$(codesign -dv dist/Ward.app 2>&1 | sed -n 's/^Identifier=//p')"
+          if [ "${ACTUAL_ID}" != "com.dimashelupets.ward" ]; then
+            echo "::error::Unexpected bundle identifier: ${ACTUAL_ID}"
+            exit 1
+          fi
+          echo "Bundle identifier: ${ACTUAL_ID}"
+
+      - name: Build .dmg
+        run: bash scripts/make-dmg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ward-unsigned
+          path: |
+            dist/*.dmg
+            dist/*-INSTRUCTIONS.txt
+          if-no-files-found: error
+
+  shellcheck:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # These scripts write to /etc/sudoers.d and run commands as root, so they
+      # get linted even though the app itself is macOS-only.
+      - name: ShellCheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck --severity=warning scripts/*.sh

@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test before releasing
+        run: swift test
+
+      - name: Build .dmg
+        run: bash scripts/make-dmg.sh
+
+      - name: Check tag matches the bundle version
+        run: |
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Support/Info.plist)"
+          if [ "${TAG}" != "v${BUNDLE_VERSION}" ]; then
+            echo "::error::Tag ${TAG} does not match Info.plist version ${BUNDLE_VERSION}. Bump one of them."
+            exit 1
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          gh release create "${TAG}" \
+            dist/*.dmg \
+            dist/*-INSTRUCTIONS.txt \
+            --title "Ward ${TAG}" \
+            --generate-notes \
+            --notes-file - <<'NOTES'
+          ## Install
+
+          Ward is **not notarized** (that needs a paid Apple Developer ID), so macOS
+          will refuse to open the download:
+
+          > "Apple could not verify Ward-x.y.z.dmg is free of malware…"
+
+          That dialog offers only **Move to Trash** and **Done**. This is expected and
+          is not a sign anything is wrong with the file. Two ways past it:
+
+          ```bash
+          xattr -d com.apple.quarantine ~/Downloads/Ward-*.dmg
+          ```
+
+          Or: click **Done**, then System Settings → Privacy & Security → scroll to
+          Security → **Open Anyway**.
+
+          Either route is you telling macOS to trust a file it cannot verify. Only do
+          that if you trust the source.
+
+          **Cleanest alternative — build it yourself.** Locally built apps are never
+          quarantined, so there is no warning at all:
+
+          ```bash
+          git clone https://github.com/${{ github.repository }} && cd ward
+          bash scripts/make-app.sh && open dist/Ward.app
+          ```
+
+          See `INSTRUCTIONS.txt` below, and the README for first-run permissions.
+          NOTES
