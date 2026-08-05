@@ -218,13 +218,20 @@ public final class CleaningModeController: NSObject {
         secureInputWatchdogTimer = nil
     }
 
+    /// This type is not main-actor isolated — making it so would reach into the
+    /// event-tap callbacks behind the exit gesture — so the isolation `NSAlert`
+    /// requires is asserted here instead. Sound because the only path to this
+    /// method is `startFromMenu`, an `@objc` menu action.
     private func presentShieldFailureAlert() {
-        WardAlert.presentFailure(
-            messageText: "Ward can’t cover the screen",
-            informativeText: """
-            macOS reported no available displays, so cleaning mode was not started. Try again in a moment.
-            """
-        )
+        MainActor.assumeIsolated {
+            WardAlert.presentFailure(
+                messageText: "Ward can’t cover the screen",
+                informativeText: """
+                macOS reported no available displays, so cleaning mode was not started. Try again \
+                in a moment.
+                """
+            )
+        }
     }
 
     private func activateApp() {
