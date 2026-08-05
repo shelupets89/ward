@@ -8,10 +8,17 @@ import AppKit
 // same SF Symbol vocabulary as the menu bar — a bolt for "this Mac is currently
 // altered" — inside a shield for the app's name.
 
+/// Top-level `try` in a script exits with a raw LLVM stack dump, which is a
+/// poor thing to hand someone whose disk filled up mid-render. Everything that
+/// can fail reports through here instead.
+func fail(_ message: String, code: Int32 = 1) -> Never {
+    FileHandle.standardError.write("make-icon: \(message)\n".data(using: .utf8) ?? Data())
+    exit(code)
+}
+
 let arguments = CommandLine.arguments
 guard arguments.count > 1 else {
-    FileHandle.standardError.write("usage: make-icon.swift <output.iconset>\n".data(using: .utf8) ?? Data())
-    exit(2)
+    fail("usage: make-icon.swift <output.iconset>", code: 2)
 }
 let outputDirectory = arguments[1]
 
@@ -72,8 +79,7 @@ func drawIcon(pixelSize: Int) -> NSBitmapImageRep? {
         .applying(NSImage.SymbolConfiguration(paletteColors: [boltColor, .white]))
     guard let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
         .withSymbolConfiguration(configuration) else {
-        FileHandle.standardError.write("\(symbolName) is unavailable\n".data(using: .utf8) ?? Data())
-        exit(1)
+        fail("the symbol \(symbolName) is unavailable on this macOS version")
     }
     let glyphHeight = badge.height * 0.60
     let glyphWidth = glyphHeight * (symbol.size.width / symbol.size.height)
@@ -91,18 +97,22 @@ func drawIcon(pixelSize: Int) -> NSBitmapImageRep? {
     return representation
 }
 
-try FileManager.default.createDirectory(
-    atPath: outputDirectory,
-    withIntermediateDirectories: true
-)
+do {
+    try FileManager.default.createDirectory(atPath: outputDirectory, withIntermediateDirectories: true)
+} catch {
+    fail("could not create \(outputDirectory): \(error.localizedDescription)")
+}
 
 for iconSize in iconSizes {
     guard let representation = drawIcon(pixelSize: iconSize.pixels),
           let pngData = representation.representation(using: .png, properties: [:]) else {
-        FileHandle.standardError.write("could not render \(iconSize.name)\n".data(using: .utf8) ?? Data())
-        exit(1)
+        fail("could not render \(iconSize.name)")
     }
-    try pngData.write(to: URL(fileURLWithPath: "\(outputDirectory)/\(iconSize.name)"))
+    do {
+        try pngData.write(to: URL(fileURLWithPath: "\(outputDirectory)/\(iconSize.name)"))
+    } catch {
+        fail("could not write \(iconSize.name): \(error.localizedDescription)")
+    }
 }
 
 print("Rendered \(iconSizes.count) sizes into \(outputDirectory)")
