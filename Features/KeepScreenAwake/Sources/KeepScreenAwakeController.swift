@@ -36,7 +36,10 @@ public final class KeepScreenAwakeController: NSObject {
     }
 
     @objc func stopFromMenu() {
-        stop()
+        guard stop() else {
+            presentReleaseFailedAlert()
+            return
+        }
     }
 
     /// Derived on every read rather than cached, so the cap passing between two
@@ -61,14 +64,23 @@ public final class KeepScreenAwakeController: NSObject {
         WardLogger.keepScreenAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")
     }
 
-    func stop() {
+    /// Releases first and only then forgets the session, so a refused release
+    /// leaves the timer running to retry and the menu still showing an active
+    /// session — which is the truth. Tearing down first would report "off"
+    /// while the screen was still held awake.
+    @discardableResult
+    func stop() -> Bool {
         guard session != nil else {
-            return
+            return true
+        }
+        guard displaySleepPreventer.endPreventingDisplaySleep() else {
+            WardLogger.keepScreenAwake.error("Display assertion refused to release; the screen is still held awake.")
+            return false
         }
         stopExpiryTimer()
-        displaySleepPreventer.endPreventingDisplaySleep()
         session = nil
         WardLogger.keepScreenAwake.info("Keep Screen Awake stopped; the display can sleep again.")
+        return true
     }
 
     /// Releasing at the cap is the timer's job, but a menu can open between two
@@ -108,6 +120,20 @@ public final class KeepScreenAwakeController: NSObject {
         alert.informativeText = """
         macOS refused the power assertion, so the display will still sleep on its usual schedule. \
         Try again in a moment.
+        """
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    /// Only raised for a deliberate Turn Off. The expiry sweep stays silent and
+    /// lets the timer retry — a dialog every 30 seconds would be worse than the
+    /// menu simply continuing to show the session as active.
+    private func presentReleaseFailedAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Ward couldn’t release the screen"
+        alert.informativeText = """
+        macOS refused to drop the power assertion, so the display is still being kept awake. \
+        Ward will keep trying, and quitting Ward releases it for certain.
         """
         alert.addButton(withTitle: "OK")
         alert.runModal()

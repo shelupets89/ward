@@ -99,7 +99,9 @@ public final class CleaningModeController: NSObject {
         backupKeyboardMonitor = nil
         inputBlocker?.stop()
         inputBlocker = nil
-        displaySleepPreventer.endPreventingDisplaySleep()
+        if !displaySleepPreventer.endPreventingDisplaySleep() {
+            WardLogger.cleaningMode.warning("Display sleep assertion refused to release; the screen stays awake until quit.")
+        }
         NSCursor.unhide()
         shieldWindowsController?.closeShields()
         shieldWindowsController = nil
