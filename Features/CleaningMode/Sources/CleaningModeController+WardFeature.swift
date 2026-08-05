@@ -5,12 +5,12 @@ import WardKit
 /// the process — so it needs none of the leak-recovery or quit-gate hooks.
 extension CleaningModeController: WardFeature {
     public func makeMenuItems() -> [NSMenuItem] {
-        let item = NSMenuItem(
-            title: "Start Cleaning Mode",
-            action: #selector(startFromMenu),
-            keyEquivalent: ""
-        )
-        item.target = self
-        return [item]
+        return [
+            FeatureMenuItems.make(
+                title: "Start Cleaning Mode",
+                action: #selector(startFromMenu),
+                target: self
+            )
+        ]
     }
 }

@@ -23,7 +23,9 @@ public final class KeepAwakeController: NSObject {
     }
 
     private var session: KeepAwakeSession?
-    private var expiryTimer: Timer?
+    private lazy var expiryTimer = ExpiryTimer(interval: Self.expiryCheckInterval) { [weak self] in
+        self?.expireSessionIfElapsed()
+    }
     private var isAwaitingConfirmation = false
     private var hasWarnedAboutFailedRestore = false
     private var hasOfferedPasswordlessSetup = false
@@ -46,7 +48,7 @@ public final class KeepAwakeController: NSObject {
 
     @objc func stopFromMenu() {
         guard stop(allowInteractivePrompt: true) else {
-            presentAlert(
+            WardAlert.presentFailure(
                 messageText: "Sleep is still disabled",
                 informativeText: """
                 Restoring normal sleep needs administrator rights, and the authorization was \
@@ -100,7 +102,7 @@ public final class KeepAwakeController: NSObject {
         }
         guard LidSleepSetting.disableSleep(allowInteractivePrompt: true) else {
             WardLogger.keepAwake.error("Could not disable lid sleep; keep-awake not started.")
-            presentAlert(
+            WardAlert.presentFailure(
                 messageText: "Ward couldn’t change the sleep setting",
                 informativeText: """
                 Disabling lid sleep needs administrator rights, and the authorization was declined \
@@ -112,7 +114,7 @@ public final class KeepAwakeController: NSObject {
         }
         session = KeepAwakeSession(startedAt: .now, duration: option.duration)
         hasWarnedAboutFailedRestore = false
-        startExpiryTimer()
+        expiryTimer.start()
         WardLogger.keepAwake.info("Keep-awake active for \(option.menuTitle, privacy: .public).")
     }
 
@@ -128,7 +130,7 @@ public final class KeepAwakeController: NSObject {
             WardLogger.keepAwake.error("Could not restore lid sleep — it is still disabled.")
             return false
         }
-        stopExpiryTimer()
+        expiryTimer.stop()
         session = nil
         hasWarnedAboutFailedRestore = false
         WardLogger.keepAwake.info("Keep-awake stopped; lid sleep restored.")
@@ -156,7 +158,7 @@ public final class KeepAwakeController: NSObject {
         }
         guard LidSleepSetting.enableSleep(allowInteractivePrompt: true) else {
             WardLogger.keepAwake.error("Restore declined or failed; lid sleep remains disabled.")
-            presentAlert(
+            WardAlert.presentFailure(
                 messageText: "Sleep is still disabled",
                 informativeText: """
                 Restoring normal sleep needs administrator rights, and the authorization was \
@@ -204,17 +206,6 @@ public final class KeepAwakeController: NSObject {
         )
     }
 
-    private func startExpiryTimer() {
-        stopExpiryTimer()
-        let timer = Timer(timeInterval: Self.expiryCheckInterval, repeats: true) { [weak self] _ in
-            // Timers on the main run loop fire on the main thread.
-            MainActor.assumeIsolated {
-                self?.expireSessionIfElapsed()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        expiryTimer = timer
-    }
 
     private func expireSessionIfElapsed() {
         guard let session, session.isExpired(at: .now) else {
@@ -229,7 +220,7 @@ public final class KeepAwakeController: NSObject {
             return
         }
         hasWarnedAboutFailedRestore = true
-        presentAlert(
+        WardAlert.presentFailure(
             messageText: "Keep Awake expired but sleep is still disabled",
             informativeText: """
             The time limit ran out, but restoring normal sleep needs administrator rights. \
@@ -239,16 +230,5 @@ public final class KeepAwakeController: NSObject {
         )
     }
 
-    private func stopExpiryTimer() {
-        expiryTimer?.invalidate()
-        expiryTimer = nil
-    }
 
-    private func presentAlert(messageText: String, informativeText: String) {
-        let alert = NSAlert()
-        alert.messageText = messageText
-        alert.informativeText = informativeText
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
 }

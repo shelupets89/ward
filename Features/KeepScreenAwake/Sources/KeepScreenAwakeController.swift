@@ -22,7 +22,9 @@ public final class KeepScreenAwakeController: NSObject {
     /// other's assertion.
     private let displaySleepPreventer = DisplaySleepPreventer(assertionName: "Ward Keep Screen Awake")
     private var session: KeepAwakeSession?
-    private var expiryTimer: Timer?
+    private lazy var expiryTimer = ExpiryTimer(interval: Self.expiryCheckInterval) { [weak self] in
+        self?.endSessionIfExpired()
+    }
 
     public override init() {
         super.init()
@@ -60,7 +62,7 @@ public final class KeepScreenAwakeController: NSObject {
             return
         }
         session = KeepAwakeSession(startedAt: .now, duration: option.duration)
-        startExpiryTimer()
+        expiryTimer.start()
         WardLogger.keepScreenAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")
     }
 
@@ -77,7 +79,7 @@ public final class KeepScreenAwakeController: NSObject {
             WardLogger.keepScreenAwake.error("Display assertion refused to release; the screen is still held awake.")
             return false
         }
-        stopExpiryTimer()
+        expiryTimer.stop()
         session = nil
         WardLogger.keepScreenAwake.info("Keep Screen Awake stopped; the display can sleep again.")
         return true
@@ -94,48 +96,29 @@ public final class KeepScreenAwakeController: NSObject {
         stop()
     }
 
-    private func startExpiryTimer() {
-        stopExpiryTimer()
-        let timer = Timer(timeInterval: Self.expiryCheckInterval, repeats: true) { [weak self] _ in
-            // Timers on the main run loop fire on the main thread.
-            MainActor.assumeIsolated {
-                self?.endSessionIfExpired()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        expiryTimer = timer
-    }
-
-    private func stopExpiryTimer() {
-        expiryTimer?.invalidate()
-        expiryTimer = nil
-    }
-
     /// The assertion is the entire feature, so a failed one is silent breakage:
     /// the user would sit back expecting the screen to stay on and watch it
     /// sleep anyway.
     private func presentAssertionFailedAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Ward couldn’t keep the screen awake"
-        alert.informativeText = """
-        macOS refused the power assertion, so the display will still sleep on its usual schedule. \
-        Try again in a moment.
-        """
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        WardAlert.presentFailure(
+            messageText: "Ward couldn’t keep the screen awake",
+            informativeText: """
+            macOS refused the power assertion, so the display will still sleep on its usual \
+            schedule. Try again in a moment.
+            """
+        )
     }
 
     /// Only raised for a deliberate Turn Off. The expiry sweep stays silent and
     /// lets the timer retry — a dialog every 30 seconds would be worse than the
     /// menu simply continuing to show the session as active.
     private func presentReleaseFailedAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Ward couldn’t release the screen"
-        alert.informativeText = """
-        macOS refused to drop the power assertion, so the display is still being kept awake. \
-        Ward will keep trying, and quitting Ward releases it for certain.
-        """
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        WardAlert.presentFailure(
+            messageText: "Ward couldn’t release the screen",
+            informativeText: """
+            macOS refused to drop the power assertion, so the display is still being kept awake. \
+            Ward will keep trying, and quitting Ward releases it for certain.
+            """
+        )
     }
 }
