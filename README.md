@@ -215,6 +215,8 @@ CI runs on every push and PR ([`.github/workflows/ci.yml`](.github/workflows/ci.
 
 Only `WardCore` has a coverage requirement. `Sources/Ward` is AppKit/IOKit glue that can't run without a real app and granted permissions — a number there would only reward fake tests. The rule that actually holds quality up is stricter: **pure, decidable logic belongs in `WardCore`, where it's tested.**
 
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Security policy and the list of files that get extra scrutiny: [SECURITY.md](SECURITY.md).
+
 - `Sources/WardCore` — pure, unit-tested logic (exit-gesture state machine, modifier matching, media-key decoding, `pmset` parsing, keep-awake expiry).
 - `Sources/Ward` — AppKit/SwiftUI glue (tap, shields, permissions, status item, privileged toggle).
 - Design rationale: `docs/superpowers/specs/2026-08-05-ward-design.md`.
