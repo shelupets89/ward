@@ -52,13 +52,13 @@ public final class KeepScreenAwakeController: NSObject {
             return
         }
         guard displaySleepPreventer.beginPreventingDisplaySleep() else {
-            WardLogger.keepAwake.error("Display sleep assertion failed; Keep Screen Awake not started.")
+            WardLogger.keepScreenAwake.error("Display sleep assertion failed; Keep Screen Awake not started.")
             presentAssertionFailedAlert()
             return
         }
         session = KeepAwakeSession(startedAt: .now, duration: option.duration)
         startExpiryTimer()
-        WardLogger.keepAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")
+        WardLogger.keepScreenAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")
     }
 
     func stop() {
@@ -68,7 +68,7 @@ public final class KeepScreenAwakeController: NSObject {
         stopExpiryTimer()
         displaySleepPreventer.endPreventingDisplaySleep()
         session = nil
-        WardLogger.keepAwake.info("Keep Screen Awake stopped; the display can sleep again.")
+        WardLogger.keepScreenAwake.info("Keep Screen Awake stopped; the display can sleep again.")
     }
 
     /// Releasing at the cap is the timer's job, but a menu can open between two
@@ -78,7 +78,7 @@ public final class KeepScreenAwakeController: NSObject {
         guard let session, session.isExpired(at: .now) else {
             return
         }
-        WardLogger.keepAwake.info("Keep Screen Awake reached its time cap.")
+        WardLogger.keepScreenAwake.info("Keep Screen Awake reached its time cap.")
         stop()
     }
 
