@@ -28,6 +28,17 @@ let package = Package(
         ),
 
         .target(
+            name: "FreePort",
+            dependencies: ["WardKit"],
+            path: "Features/FreePort/Sources"
+        ),
+        .testTarget(
+            name: "FreePortTests",
+            dependencies: ["FreePort"],
+            path: "Features/FreePort/Tests"
+        ),
+
+        .target(
             name: "KeepAwakeLidClosed",
             dependencies: ["WardKit"],
             path: "Features/KeepAwakeLidClosed/Sources"
@@ -51,7 +62,7 @@ let package = Package(
 
         .executableTarget(
             name: "Ward",
-            dependencies: ["WardKit", "CleaningMode", "KeepAwakeLidClosed", "KeepScreenAwake"]
+            dependencies: ["WardKit", "CleaningMode", "FreePort", "KeepAwakeLidClosed", "KeepScreenAwake"]
         )
     ]
 )

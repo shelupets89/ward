@@ -12,4 +12,5 @@ public enum WardLogger {
     /// the user to act — with a session that merely ended.
     public static let keepAwake = Logger(subsystem: "com.dimashelupets.ward", category: "keep-awake")
     public static let keepScreenAwake = Logger(subsystem: "com.dimashelupets.ward", category: "keep-screen-awake")
+    public static let freePort = Logger(subsystem: "com.dimashelupets.ward", category: "free-port")
 }

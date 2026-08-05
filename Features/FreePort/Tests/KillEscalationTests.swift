@@ -1,0 +1,172 @@
+import Testing
+@testable import FreePort
+
+/// The escalation is the part that can destroy work, so every case here is a
+/// safety property rather than a convenience: what gets signalled, what only
+/// gets reported, and when the machine stops.
+struct KillEscalationTests {
+    private let currentUser = "dimashelupets"
+
+    private func ownedProcess(
+        command: String = "node",
+        pid: Int32,
+        port: UInt16 = 3001
+    ) -> ListeningProcess {
+        return ListeningProcess(command: command, processIdentifier: pid, user: currentUser, port: port)
+    }
+
+    private func rootProcess(command: String = "sshd", pid: Int32, port: UInt16 = 22) -> ListeningProcess {
+        return ListeningProcess(command: command, processIdentifier: pid, user: "root", port: port)
+    }
+
+    private func snapshot(_ holders: [ListeningProcess], isOccupied: Bool? = nil) -> PortSnapshot {
+        return PortSnapshot(holders: holders, isOccupied: isOccupied ?? !holders.isEmpty)
+    }
+
+    private func nextStep(
+        stage: KillEscalation.Stage,
+        snapshot portSnapshot: PortSnapshot
+    ) -> KillEscalation.Step {
+        return KillEscalation.nextStep(stage: stage, snapshot: portSnapshot, currentUser: currentUser)
+    }
+
+    // MARK: - Nothing to do
+
+    @Test("Never signals anything when nothing was listening")
+    func reportsNothingWasListening() {
+        let step = nextStep(stage: .initial, snapshot: snapshot([], isOccupied: false))
+        #expect(step == .report(.nothingWasListening))
+    }
+
+    @Test("Reports a port held by someone else rather than claiming it was free")
+    func reportsPortHeldByAProcessItCannotSee() {
+        let step = nextStep(stage: .initial, snapshot: snapshot([], isOccupied: true))
+        #expect(step == .report(.heldByAnotherUser(visibleHolders: [])))
+    }
+
+    @Test("Reports a root-held port instead of signalling it")
+    func neverSignalsAProcessOwnedByAnotherUser() {
+        let daemon = rootProcess(pid: 431)
+        let step = nextStep(stage: .initial, snapshot: snapshot([daemon]))
+        #expect(step == .report(.heldByAnotherUser(visibleHolders: [daemon])))
+    }
+
+    @Test("Reports every holder when a port mixes owned and root processes but none can be signalled")
+    func reportsMixedOwnershipWithoutSignalling() {
+        let daemons = [rootProcess(pid: 431), rootProcess(command: "launchd", pid: 1)]
+        let step = nextStep(stage: .initial, snapshot: snapshot(daemons))
+        #expect(step == .report(.heldByAnotherUser(visibleHolders: daemons)))
+    }
+
+    // MARK: - Termination first
+
+    @Test("Sends SIGTERM before anything else")
+    func terminatesBeforeForceKilling() {
+        let step = nextStep(stage: .initial, snapshot: snapshot([ownedProcess(pid: 26036)]))
+        #expect(step == .terminate([26036]))
+    }
+
+    @Test("Signals only the processes this user owns")
+    func terminatesOnlyOwnedProcesses() {
+        let holders = [ownedProcess(pid: 26036), rootProcess(pid: 431, port: 3001)]
+        let step = nextStep(stage: .initial, snapshot: snapshot(holders))
+        #expect(step == .terminate([26036]))
+    }
+
+    @Test("Signals each pid once even when it holds the port twice")
+    func terminatesEachProcessOnce() {
+        let duplicated = [ownedProcess(pid: 26036), ownedProcess(pid: 26036)]
+        let step = nextStep(stage: .initial, snapshot: snapshot(duplicated))
+        #expect(step == .terminate([26036]))
+    }
+
+    @Test("Signals a multi-process port in a stable order")
+    func terminatesInStableOrder() {
+        let holders = [ownedProcess(pid: 900), ownedProcess(pid: 100), ownedProcess(pid: 500)]
+        let step = nextStep(stage: .initial, snapshot: snapshot(holders))
+        #expect(step == .terminate([100, 500, 900]))
+    }
+
+    // MARK: - Escalation after the grace period
+
+    @Test("Stops without SIGKILL when SIGTERM already freed the port")
+    func stopsWhenTerminationFreedThePort() {
+        let step = nextStep(
+            stage: .afterTermination(approvedTargets: [26036]),
+            snapshot: snapshot([], isOccupied: false)
+        )
+        #expect(step == .report(.freed))
+    }
+
+    @Test("Escalates to SIGKILL for the survivors of SIGTERM")
+    func escalatesToForceKillForSurvivors() {
+        let survivors = [ownedProcess(pid: 26036)]
+        let step = nextStep(stage: .afterTermination(approvedTargets: [26036, 26037]), snapshot: snapshot(survivors))
+        #expect(step == .forceKill([26036]))
+    }
+
+    @Test("Never force-kills a process the user was not shown")
+    func neverForceKillsAnUnapprovedProcess() {
+        let squatter = ownedProcess(command: "python3", pid: 55555)
+        let step = nextStep(stage: .afterTermination(approvedTargets: [26036]), snapshot: snapshot([squatter]))
+        #expect(step == .report(.stillHeld([squatter])))
+    }
+
+    @Test("Reports rather than escalating when only another user's process survives")
+    func reportsWhenOnlyAnotherUsersProcessSurvives() {
+        let daemon = rootProcess(pid: 431, port: 3001)
+        let step = nextStep(stage: .afterTermination(approvedTargets: [26036]), snapshot: snapshot([daemon]))
+        #expect(step == .report(.heldByAnotherUser(visibleHolders: [daemon])))
+    }
+
+    // MARK: - Verification after SIGKILL
+
+    @Test("Confirms the port is free only after re-checking it")
+    func reportsFreedAfterForceKill() {
+        let step = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036]),
+            snapshot: snapshot([], isOccupied: false)
+        )
+        #expect(step == .report(.freed))
+    }
+
+    @Test("Reports still-held when survivors outlive SIGKILL")
+    func reportsStillHeldWhenSurvivorsPersist() {
+        let survivors = [ownedProcess(pid: 26036)]
+        let step = nextStep(stage: .afterForceKill(approvedTargets: [26036]), snapshot: snapshot(survivors))
+        #expect(step == .report(.stillHeld(survivors)))
+    }
+
+    @Test("Never escalates past SIGKILL")
+    func neverEscalatesPastForceKill() {
+        let step = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036]),
+            snapshot: snapshot([ownedProcess(pid: 26036)])
+        )
+        #expect(step != .forceKill([26036]))
+        #expect(step != .terminate([26036]))
+    }
+
+    @Test("Treats a process that vanished on its own as success, not as an error")
+    func treatsAlreadyGoneAsSuccess() {
+        let afterTermination = nextStep(
+            stage: .afterTermination(approvedTargets: [26036]),
+            snapshot: snapshot([], isOccupied: false)
+        )
+        let afterForceKill = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036]),
+            snapshot: snapshot([], isOccupied: false)
+        )
+        #expect(afterTermination == .report(.freed))
+        #expect(afterForceKill == .report(.freed))
+    }
+
+    @Test("Does not claim the port is free while something invisible still listens")
+    func doesNotClaimFreedWhileStillOccupied() {
+        let step = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036]),
+            snapshot: snapshot([], isOccupied: true)
+        )
+        #expect(step == .report(.heldByAnotherUser(visibleHolders: [])))
+    }
+}
