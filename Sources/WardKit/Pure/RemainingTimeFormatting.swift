@@ -15,8 +15,12 @@ public enum RemainingTimeFormatting {
             return "0:00"
         }
         let (seconds, attoseconds) = remaining.components
-        let secondsRoundedUp = attoseconds > 0 ? seconds + 1 : seconds
-        let minutesRoundedUp = (secondsRoundedUp + 59) / 60
+        // Divide before rounding up. The usual `(seconds + 59) / 60` ceiling
+        // overflows Int64 near `.seconds(Int64.max)`, and Swift traps on that
+        // rather than returning — a crash in a formatter nothing validates.
+        let wholeMinutes = seconds / 60
+        let hasPartialMinute = seconds % 60 > 0 || attoseconds > 0
+        let minutesRoundedUp = hasPartialMinute ? wholeMinutes + 1 : wholeMinutes
         let minutePart = minutesRoundedUp % 60
         let paddedMinutes = minutePart < 10 ? "0\(minutePart)" : "\(minutePart)"
         return "\(minutesRoundedUp / 60):\(paddedMinutes)"
