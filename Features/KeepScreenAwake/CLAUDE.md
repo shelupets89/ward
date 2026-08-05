@@ -10,7 +10,7 @@
 
 ## Gotchas
 
-- `DisplaySleepPreventer` already exists in `WardKit` and is used by Cleaning Mode. It's idempotent, but two features holding it at once means the first release must not cancel the second — check that before assuming reuse is free.
+- `DisplaySleepPreventer` already exists in `WardKit` and is used by Cleaning Mode. **Reuse is free** — verified: `activeAssertionID` is an instance property, and `CleaningModeController` holds its own preventer behind a `private let`. A separate instance is therefore a separate `IOPMAssertion`, and releasing one cannot cancel the other. Give this feature its own instance and stop thinking about it.
 - `PreventUserIdleDisplaySleep` stops the *display* sleeping. It does not stop the system sleeping when the lid closes, and it does not stop app-level idle detection.
 
 ## Layout

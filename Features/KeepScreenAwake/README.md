@@ -2,7 +2,7 @@
 
 Stops the display sleeping for a capped stretch, without touching your mouse.
 
-**Status:** Planned · **Failure model:** fails open
+**Status:** Shipped · **Failure model:** fails open
 
 ## Why it isn't built in
 
