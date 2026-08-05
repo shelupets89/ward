@@ -39,7 +39,12 @@ public final class CleaningModeController: NSObject {
         enterCleaningMode()
     }
 
-    func enterCleaningMode() {
+    /// `private`, and it has to stay that way: the two alerts below assert main-
+    /// actor isolation rather than declaring it, so they trap on a background
+    /// thread. Keeping the only door into them shut to the rest of the module
+    /// means the sole caller is `startFromMenu`, which AppKit only ever invokes
+    /// on the main thread.
+    private func enterCleaningMode() {
         guard !isActive else {
             return
         }
@@ -48,7 +53,9 @@ public final class CleaningModeController: NSObject {
         }
         guard !SecureInputDetector.isSecureInputActive else {
             WardLogger.cleaningMode.notice("Entry refused: another app holds secure keyboard input.")
-            SecureInputDetector.presentSecureInputBlockedAlert()
+            MainActor.assumeIsolated {
+                SecureInputDetector.presentSecureInputBlockedAlert()
+            }
             return
         }
         let handlers = makeInputEventHandlers()
