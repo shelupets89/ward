@@ -92,7 +92,9 @@ public final class FreePortController: NSObject {
     /// SIGTERM, wait, re-read, SIGKILL the survivors, wait, re-read. Each
     /// re-read is a fresh snapshot: nothing here trusts that a signal worked.
     private func escalate(onPort port: UInt16, approvedTargets: Set<Int32>) async {
-        let refusedTermination = signal(.terminate, to: approvedTargets.sorted())
+        // Discarded deliberately: only the SIGKILL round's result describes the
+        // final state, and anything refused here is re-signalled below anyway.
+        _ = signal(.terminate, to: approvedTargets.sorted())
         guard await waited(Self.terminationGracePeriod, onPort: port) else {
             present(FreePortMessages.unverifiablePort(port))
             return
@@ -109,10 +111,16 @@ public final class FreePortController: NSObject {
             report(escalationStep, port: port)
             return
         }
+        // "Still present", not "survived": SIGTERM may have been refused rather
+        // than ignored, and the log should not assert a delivery either.
         WardLogger.freePort.notice(
-            "\(survivors.count, privacy: .public) process(es) survived SIGTERM on port \(port, privacy: .public)."
+            "\(survivors.count, privacy: .public) process(es) still on port \(port, privacy: .public) after SIGTERM."
         )
-        let refusedForceKill = signal(.forceKill, to: survivors)
+        // The SIGKILL round's result is the only one that describes the final
+        // state. A pid macOS refused at SIGTERM but accepted here *was*
+        // signalled, and carrying the earlier refusal forward would report it
+        // as never touched.
+        let undeliveredForceKill = signal(.forceKill, to: survivors)
         guard await waited(Self.forceKillSettlingPeriod, onPort: port) else {
             present(FreePortMessages.unverifiablePort(port))
             return
@@ -124,7 +132,7 @@ public final class FreePortController: NSObject {
             KillEscalation.nextStep(
                 stage: .afterForceKill(
                     approvedTargets: approvedTargets,
-                    refusedTargets: refusedTermination.union(refusedForceKill)
+                    undeliveredTargets: undeliveredForceKill
                 ),
                 snapshot: afterForceKill,
                 currentUser: PortInspector.currentUser
@@ -133,10 +141,11 @@ public final class FreePortController: NSObject {
         )
     }
 
-    /// Returns the pids macOS refused to signal. That answer has to survive back
-    /// to the final report: an undelivered signal leaves the process running,
-    /// and calling that "survived SIGKILL" describes something that never
-    /// happened and sends the user looking for a fix that does not exist.
+    /// Returns the pids the signal never reached — refused by macOS, or failed
+    /// outright. Both belong in one set because the report turns on delivery,
+    /// not on the reason: an undelivered signal leaves the process running, and
+    /// calling that "survived SIGKILL" describes something that never happened
+    /// and sends the user looking for a fix that does not exist.
     private func signal(_ signal: ProcessSignaller.Signal, to processIdentifiers: [Int32]) -> Set<Int32> {
         let outcomes = processIdentifiers.map { processIdentifier in
             let outcome = ProcessSignaller.send(signal, to: processIdentifier)

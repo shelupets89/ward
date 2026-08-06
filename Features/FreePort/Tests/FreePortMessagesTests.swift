@@ -85,9 +85,45 @@ struct FreePortMessagesTests {
 
     @Test("Names the survivors when a port stays held")
     func namesSurvivors() {
-        let text = FreePortMessages.outcome(.stillHeld([server]), port: 3001)
+        let text = FreePortMessages.outcome(.stillHeld(signalled: [server], undelivered: []), port: 3001)
         #expect(text.body.contains("node (pid 26036)"))
         #expect(text.body.contains("SIGKILL"))
+    }
+
+    @Test("Names both a wedged survivor and an undelivered one, dropping neither")
+    func namesBothKindsOfSurvivor() {
+        let text = FreePortMessages.outcome(
+            .stillHeld(signalled: [server], undelivered: [worker]),
+            port: 3001
+        )
+        #expect(text.body.contains("node (pid 26036)"))
+        #expect(text.body.contains("python3 (pid 26037)"))
+        #expect(text.body.contains("survived"))
+        #expect(text.body.contains("could not deliver"))
+    }
+
+    @Test("Says an undelivered signal was never sent, not that it was survived")
+    func doesNotCallAnUndeliveredSignalSurvived() {
+        let text = FreePortMessages.outcome(
+            .stillHeld(signalled: [], undelivered: [server]),
+            port: 3001
+        )
+        #expect(text.body.contains("node (pid 26036)"))
+        #expect(text.body.contains("never sent anything"))
+        #expect(!text.body.contains("survived"))
+    }
+
+    @Test("Agrees in number across both survivor lists")
+    func stillHeldTextAgreesInNumber() {
+        let single = FreePortMessages.outcome(.stillHeld(signalled: [server], undelivered: [worker]), port: 3001)
+        let several = FreePortMessages.outcome(
+            .stillHeld(signalled: [server, worker], undelivered: [server, worker]),
+            port: 3001
+        )
+        #expect(single.body.contains("This survived"))
+        #expect(single.body.contains("deliver a signal to this one"))
+        #expect(several.body.contains("These survived"))
+        #expect(several.body.contains("deliver a signal to these"))
     }
 
     @Test("Never claims a process survived a signal Ward did not send it")
@@ -104,34 +140,6 @@ struct FreePortMessagesTests {
         let text = FreePortMessages.outcome(.freedThenTakenByAnotherUser, port: 3001)
         #expect(text.body.contains("Ward stopped what you approved"))
         #expect(text.body.contains("Nothing you approved is still running"))
-    }
-
-    @Test("Says a refused signal was never sent, rather than that it was survived")
-    func reportsARefusalAsARefusal() {
-        let text = FreePortMessages.outcome(.notPermitted([server]), port: 3001)
-        #expect(text.body.contains("node (pid 26036)"))
-        #expect(text.body.contains("refused"))
-        #expect(text.body.contains("never signalled"))
-        #expect(!text.body.contains("survived"))
-    }
-
-    @Test("Agrees in number when several processes are refused")
-    func refusalTextAgreesInNumber() {
-        let single = FreePortMessages.outcome(.notPermitted([server]), port: 3001)
-        let several = FreePortMessages.outcome(.notPermitted([server, worker]), port: 3001)
-        #expect(single.title.contains("stop that"))
-        #expect(single.body.contains("it was never signalled"))
-        #expect(several.title.contains("stop those"))
-        #expect(several.body.contains("they were never signalled"))
-    }
-
-    @Test("Agrees in number when several processes survive or several take the port")
-    func outcomeTextAgreesInNumber() {
-        let survivors = FreePortMessages.outcome(.stillHeld([server, worker]), port: 3001)
-        let squatters = FreePortMessages.outcome(.takenByAnotherProcess([server, worker]), port: 3001)
-        #expect(survivors.body.contains("They survived"))
-        #expect(squatters.body.contains("did not signal them"))
-        #expect(squatters.body.contains("they were not in the list"))
     }
 
     @Test("Says a signal already went out when the verifying read fails")

@@ -17,12 +17,12 @@ struct ProcessSignallerTests {
         #expect(ProcessSignaller.send(.forceKill, to: processIdentifier) == .failed)
     }
 
-    @Test("Reports a pid that no longer exists as already gone, not as a failure")
-    func treatsAVanishedProcessAsAlreadyGone() {
-        // Above the default pid_max, so it cannot name a live process.
-        let unusedProcessIdentifier: Int32 = 99_998
-        #expect(ProcessSignaller.send(.terminate, to: unusedProcessIdentifier) == .alreadyGone)
-    }
+    // There is deliberately no test for the ESRCH ("already gone") path. Naming
+    // a supposedly-dead pid means sending a real SIGTERM to whatever the kernel
+    // has there now, and macOS recycles pids by cumulative process count — on a
+    // Mac with any uptime, a "safely high" constant is live sooner or later.
+    // A test suite for the one feature that can lose the user's work must not
+    // be able to kill one of their processes.
 
     @Test("Maps its two signals to the numbers kill(2) expects")
     func mapsSignalsToNumbers() {

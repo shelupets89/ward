@@ -131,7 +131,7 @@ struct KillEscalationTests {
             snapshot: snapshot([squatter])
         )
         let afterForceKill = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []),
+            stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []),
             snapshot: snapshot([squatter])
         )
         #expect(afterTermination == .report(.takenByAnotherProcess([squatter])))
@@ -143,10 +143,10 @@ struct KillEscalationTests {
         let survivor = ownedProcess(pid: 26036)
         let lateArrival = ownedProcess(command: "python3", pid: 55555)
         let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []),
+            stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []),
             snapshot: snapshot([survivor, lateArrival])
         )
-        #expect(step == .report(.stillHeld([survivor])))
+        #expect(step == .report(.stillHeld(signalled: [survivor], undelivered: [])))
     }
 
     @Test("Reports rather than escalating when only another user's process survives")
@@ -161,7 +161,7 @@ struct KillEscalationTests {
     @Test("Confirms the port is free only after re-checking it")
     func reportsFreedAfterForceKill() {
         let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []),
+            stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []),
             snapshot: snapshot([], isOccupied: false)
         )
         #expect(step == .report(.freed))
@@ -170,45 +170,45 @@ struct KillEscalationTests {
     @Test("Says the kill worked when an invisible process takes the freed port")
     func distinguishesReoccupationFromNeverHavingATarget() {
         let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []),
+            stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []),
             snapshot: snapshot([], isOccupied: true)
         )
         #expect(step == .report(.freedThenTakenByAnotherUser))
     }
 
-    @Test("Never describes a refused signal as one the process survived")
-    func reportsARefusedSignalAsRefused() {
+    @Test("Never describes an undelivered signal as one the process survived")
+    func reportsAnUndeliveredSignalSeparately() {
         let protectedProcess = ownedProcess(command: "coreaudiod", pid: 26036)
         let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: [26036]),
+            stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: [26036]),
             snapshot: snapshot([protectedProcess])
         )
-        #expect(step == .report(.notPermitted([protectedProcess])))
+        #expect(step == .report(.stillHeld(signalled: [], undelivered: [protectedProcess])))
     }
 
-    @Test("Separates a refused process from one that genuinely outlived SIGKILL")
-    func prefersTheRefusalWhenBothHappen() {
-        let refusedProcess = ownedProcess(command: "coreaudiod", pid: 26036)
+    @Test("Reports both a wedged survivor and an undelivered one, dropping neither")
+    func reportsBothKindsOfSurvivorTogether() {
+        let undeliveredProcess = ownedProcess(command: "coreaudiod", pid: 26036)
         let wedgedProcess = ownedProcess(pid: 26037)
         let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036, 26037], refusedTargets: [26036]),
-            snapshot: snapshot([refusedProcess, wedgedProcess])
+            stage: .afterForceKill(approvedTargets: [26036, 26037], undeliveredTargets: [26036]),
+            snapshot: snapshot([undeliveredProcess, wedgedProcess])
         )
-        #expect(step == .report(.notPermitted([refusedProcess])))
+        #expect(step == .report(.stillHeld(signalled: [wedgedProcess], undelivered: [undeliveredProcess])))
     }
 
     @Test("Reports still-held when survivors outlive SIGKILL")
     func reportsStillHeldWhenSurvivorsPersist() {
         let survivors = [ownedProcess(pid: 26036)]
-        let step = nextStep(stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []), snapshot: snapshot(survivors))
-        #expect(step == .report(.stillHeld(survivors)))
+        let step = nextStep(stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []), snapshot: snapshot(survivors))
+        #expect(step == .report(.stillHeld(signalled: survivors, undelivered: [])))
     }
 
     @Test("Never escalates past SIGKILL")
     func neverEscalatesPastForceKill() {
         let survivor = ownedProcess(pid: 26036)
-        let step = nextStep(stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []), snapshot: snapshot([survivor]))
-        #expect(step == .report(.stillHeld([survivor])))
+        let step = nextStep(stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []), snapshot: snapshot([survivor]))
+        #expect(step == .report(.stillHeld(signalled: [survivor], undelivered: [])))
     }
 
     @Test("Treats a process that vanished on its own as success, not as an error")
@@ -218,19 +218,10 @@ struct KillEscalationTests {
             snapshot: snapshot([], isOccupied: false)
         )
         let afterForceKill = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []),
+            stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []),
             snapshot: snapshot([], isOccupied: false)
         )
         #expect(afterTermination == .report(.freed))
         #expect(afterForceKill == .report(.freed))
-    }
-
-    @Test("Does not claim the port is free while something invisible still listens")
-    func doesNotClaimFreedWhileStillOccupied() {
-        let step = nextStep(
-            stage: .afterForceKill(approvedTargets: [26036], refusedTargets: []),
-            snapshot: snapshot([], isOccupied: true)
-        )
-        #expect(step != .report(.freed))
     }
 }

@@ -15,11 +15,13 @@ public enum KillEscalation {
         case initial
         /// `approvedTargets` are the pids the user was shown and accepted.
         case afterTermination(approvedTargets: Set<Int32>)
-        /// `refusedTargets` are the pids the kernel returned `EPERM` for. They
-        /// are carried this far because a refused signal was never delivered,
-        /// and a process that was never signalled cannot be said to have
-        /// survived one.
-        case afterForceKill(approvedTargets: Set<Int32>, refusedTargets: Set<Int32>)
+        /// `undeliveredTargets` are the pids whose SIGKILL never landed — macOS
+        /// refused it, or the call failed. Carried this far because a process
+        /// that was never signalled cannot be said to have survived a signal.
+        /// This is the SIGKILL round's result only: a pid refused at SIGTERM
+        /// whose SIGKILL then succeeded was signalled, and folding the earlier
+        /// refusal in would report it as untouched.
+        case afterForceKill(approvedTargets: Set<Int32>, undeliveredTargets: Set<Int32>)
     }
 
     public enum Step: Equatable, Sendable {
@@ -39,13 +41,13 @@ public enum KillEscalation {
         /// says Ward never had anything to stop here — telling the user that
         /// after a successful kill makes a working action look like a failure.
         case freedThenTakenByAnotherUser
-        /// Processes that were signalled and are still there.
-        case stillHeld([ListeningProcess])
-        /// The kernel refused to signal these — `EPERM` despite the ownership
-        /// check passing, which macOS can return for a protected process. They
-        /// were never signalled, so they are reported separately from the ones
-        /// that were and survived.
-        case notPermitted([ListeningProcess])
+        /// The port is still held. Both lists are reported because they mean
+        /// different things and the user needs each: `signalled` outlived a
+        /// delivered SIGKILL, `undelivered` never received one — macOS refused
+        /// or the call failed. Carrying them in one case is deliberate; an
+        /// earlier shape returned only the undelivered ones and silently
+        /// dropped a process that was still holding the port.
+        case stillHeld(signalled: [ListeningProcess], undelivered: [ListeningProcess])
         /// The approved processes are gone, but something that was never
         /// signalled is on the port now — typically a supervisor restarting the
         /// server inside the grace period. Kept apart from `stillHeld` because
@@ -67,20 +69,19 @@ public enum KillEscalation {
             return .terminate(targets)
         case .afterTermination:
             return .forceKill(targets)
-        case .afterForceKill(_, let refusedTargets):
+        case .afterForceKill(_, let undeliveredTargets):
             // Only the pids actually signalled can be said to have survived. A
             // stranger that appeared during the settling window is reported by
             // the branch above, under its own outcome.
             let signalledTargets = Set(targets)
             let survivors = snapshot.holders.filter { signalledTargets.contains($0.processIdentifier) }
-            let refused = survivors.filter { refusedTargets.contains($0.processIdentifier) }
-            // A refusal is the more actionable news and the more likely one: a
-            // process that outlives a *delivered* SIGKILL is wedged in the
-            // kernel, whereas one macOS refused to signal is merely protected.
-            guard refused.isEmpty else {
-                return .report(.notPermitted(refused))
-            }
-            return .report(.stillHeld(survivors))
+            let undelivered = survivors.filter { undeliveredTargets.contains($0.processIdentifier) }
+            return .report(
+                .stillHeld(
+                    signalled: survivors.filter { !undeliveredTargets.contains($0.processIdentifier) },
+                    undelivered: undelivered
+                )
+            )
         }
     }
 

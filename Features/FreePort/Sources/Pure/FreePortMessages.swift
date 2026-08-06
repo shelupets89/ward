@@ -54,31 +54,10 @@ public enum FreePortMessages {
                 which one. Nothing you approved is still running.
                 """
             )
-        case .notPermitted(let refusedHolders):
-            return AlertText(
-                title: "macOS would not let Ward stop \(refusedHolders.count == 1 ? "that" : "those")",
-                body: """
-                Ward asked macOS to stop:
-
-                \(list(refusedHolders))
-                and was refused, so \(refusedHolders.count == 1 ? "it was" : "they were") never \
-                signalled and \(refusedHolders.count == 1 ? "is" : "are") still running. This \
-                normally means the process is protected by the system. Stopping it from a \
-                terminal will not work either; restarting is usually the only way.
-                """
-            )
+        case .stillHeld(let signalled, let undelivered):
+            return stillHeldPort(port, signalled: signalled, undelivered: undelivered)
         case .heldByAnotherUser(let visibleHolders):
             return anotherUsersPort(port, visibleHolders: visibleHolders)
-        case .stillHeld(let holders):
-            return AlertText(
-                title: "Port \(port) is still in use",
-                body: """
-                Port \(port) is still held by:
-
-                \(list(holders))
-                \(holders.count == 1 ? "It" : "They") survived both SIGTERM and SIGKILL.
-                """
-            )
         case .takenByAnotherProcess(let holders):
             return AlertText(
                 title: "Port \(port) is in use again",
@@ -92,6 +71,37 @@ public enum FreePortMessages {
                 """
             )
         }
+    }
+
+    /// Both lists are rendered when both are non-empty. Reporting only one of
+    /// them would leave a process holding the port unnamed, which is the same
+    /// failure as reporting a count instead of names.
+    private static func stillHeldPort(
+        _ port: UInt16,
+        signalled: [ListeningProcess],
+        undelivered: [ListeningProcess]
+    ) -> AlertText {
+        let survivedParagraph = signalled.isEmpty ? "" : """
+
+
+        \(signalled.count == 1 ? "This survived" : "These survived") both SIGTERM and SIGKILL:
+
+        \(list(signalled))
+        """
+        let undeliveredParagraph = undelivered.isEmpty ? "" : """
+
+
+        Ward could not deliver a signal to \(undelivered.count == 1 ? "this one" : "these"), so \
+        \(undelivered.count == 1 ? "it was" : "they were") never sent anything. That usually \
+        means the process is protected by the system, and stopping it from a terminal will \
+        not work either:
+
+        \(list(undelivered))
+        """
+        return AlertText(
+            title: "Port \(port) is still in use",
+            body: "Port \(port) is still held.\(survivedParagraph)\(undeliveredParagraph)"
+        )
     }
 
     /// Branches on emptiness inside one case rather than across two `where`
