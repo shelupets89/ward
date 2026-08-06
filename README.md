@@ -68,7 +68,7 @@ log stream --predicate 'subsystem == "com.dimashelupets.ward"' --level info
 
 ```bash
 swift build
-swift test                  # 128 tests
+swift test                  # 139 tests
 bash scripts/coverage.sh    # Pure/ must stay ≥85%
 ```
 

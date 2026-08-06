@@ -5,6 +5,12 @@
 /// own processes; `isOccupied` is what `netstat` says, which covers everyone.
 /// Empty holders with `isOccupied` true is therefore the normal shape of a
 /// root-held port, not a contradiction.
+///
+/// The opposite disagreement — holders present, `isOccupied` false — is also
+/// reachable, because the two commands run one after the other rather than
+/// atomically. It needs no handling: `isOccupied` is only ever consulted when
+/// `holders` is empty. Seeing a holder is the stronger evidence, so nothing
+/// downstream asks `netstat` to confirm it.
 public struct PortSnapshot: Equatable, Sendable {
     public let holders: [ListeningProcess]
     public let isOccupied: Bool
