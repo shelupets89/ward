@@ -116,44 +116,62 @@ struct InputPermissionAlertBodyTests {
         #expect(accessibilityText.contains("Ward is running from:"))
         #expect(accessibilityText.contains("\n\(unbundledBuildPath)\n"))
         #expect(accessibilityText.contains("not an app bundle"))
-        #expect(accessibilityText.contains("build and launch dist/Ward.app so the grant belongs to Ward itself."))
+        #expect(accessibilityText.contains("build and launch dist/Ward.app and grant Ward itself."))
         #expect(refusedTapText.contains("Ward is running from:"))
         #expect(refusedTapText.contains("\n\(unbundledBuildPath)\n"))
         #expect(refusedTapText.contains("not an app bundle"))
-        #expect(refusedTapText.contains("build and launch dist/Ward.app so the grant belongs to Ward itself."))
+        #expect(refusedTapText.contains("build and launch dist/Ward.app and grant Ward itself."))
     }
 
-    /// The pane is where an unbundled build gets fixed too — the grant belongs
-    /// to whatever launched it, and that app is listed there. Withholding the
-    /// instruction here would cost the reader the fast fix and leave only the
-    /// rebuild.
-    @Test("Keeps the pane instruction for an unbundled build, where the fix also lives")
-    func keepsPaneInstructionForUnbundledBuild() {
-        #expect(
-            InputPermissionAlertBody
-                .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
-                .contains("Open System Settings → Privacy & Security → Accessibility")
-        )
-        #expect(
-            InputPermissionAlertBody
-                .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
-                .contains("Enable Ward under Privacy & Security → Input Monitoring")
-        )
+    /// The pane still matters for an unbundled build — the grant belongs to
+    /// whatever launched it, and that app is listed there — but naming Ward as
+    /// the thing to enable would contradict the paragraph that says the grant is
+    /// not Ward's. Both alerts must point at the pane without naming Ward.
+    @Test("Points an unbundled build at the pane without naming Ward as the entry")
+    func pointsUnbundledBuildAtPaneWithoutNamingWard() {
+        let accessibilityText = InputPermissionAlertBody
+            .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
+        let refusedTapText = InputPermissionAlertBody
+            .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
+        #expect(accessibilityText.contains("Privacy & Security → Accessibility"))
+        #expect(refusedTapText.contains("Privacy & Security → Input Monitoring"))
+        #expect(!accessibilityText.contains("Enable Ward"))
+        #expect(!refusedTapText.contains("Enable Ward"))
     }
 
-    /// Naming the grant's real holder is the whole value of this branch, and
-    /// "nothing you add can match it" was false — it is Ward that cannot be
-    /// added, not the launching app, which is already in the list.
-    @Test("Names both fixes for an unbundled build rather than only the rebuild")
+    /// Naming the grant's real holder is the whole value of this branch. The
+    /// attribution stays hedged — a build started by launchd has no app to
+    /// enable — and the rebuild is not a one-step fix either, so it says so.
+    @Test("Names both fixes for an unbundled build, and overstates neither")
     func namesBothFixesForUnbundledBuild() {
         let accessibilityText = InputPermissionAlertBody
             .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
         let refusedTapText = InputPermissionAlertBody
             .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
-        #expect(accessibilityText.contains("the grant belongs to whatever launched it"))
-        #expect(accessibilityText.contains("Enable that app in the list instead"))
-        #expect(refusedTapText.contains("the grant belongs to whatever launched it"))
-        #expect(refusedTapText.contains("Enable that app in the list instead"))
+        for text in [accessibilityText, refusedTapText] {
+            #expect(text.contains("the grant belongs to whatever launched it — usually your terminal"))
+            #expect(text.contains("build and launch dist/Ward.app and grant Ward itself"))
+            // Xcode's attribution has never been measured here, unlike the
+            // terminal's, so the copy must not name it as though it had.
+            #expect(!text.contains("Xcode"))
+        }
+    }
+
+    /// A stale Ward entry is not an unbundled build's problem — it was just told
+    /// the grant is not Ward's — and the fix for it is withheld anyway, so the
+    /// warning would dangle.
+    @Test("Leaves the stale-entry warning out of an unbundled build's alert")
+    func leavesStaleEntryWarningOutOfUnbundledAlert() {
+        #expect(
+            !InputPermissionAlertBody
+                .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
+                .contains("A Ward already listed there")
+        )
+        #expect(
+            !InputPermissionAlertBody
+                .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
+                .contains("already listed under either pane")
+        )
     }
 
     /// There is nothing to add, so telling the user to add it back would
@@ -226,8 +244,8 @@ struct InputPermissionAlertBodyTests {
         // through, so it is asserted rather than argued.
         #expect(!accessibilityText.contains(remediation))
         #expect(!refusedTapText.contains(remediation))
-        // A blank path says nothing about whether the build could be listed, so
-        // unlike a visibly unbundled one it still gets the instruction.
+        // A blank path is not evidence the build is unbundled, so it takes the
+        // standard body and keeps that body's instruction.
         #expect(accessibilityText.contains("Open System Settings → Privacy & Security → Accessibility"))
         #expect(refusedTapText.contains("Enable Ward under Privacy & Security → Input Monitoring"))
     }
