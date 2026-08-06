@@ -17,11 +17,6 @@ private let awkwardPath = "/Users/you/My Projects/ward/dist/Ward.app"
 /// only one alert carried it — so the tests assert it from a single source.
 private let remediation = "Remove that entry with “−” and add this copy of Ward instead."
 
-private let bothAlerts: [(String) -> String] = [
-    { InputPermissionAlertBody.describeMissingAccessibility(runningBundlePath: $0) },
-    { InputPermissionAlertBody.describeRefusedInputTap(runningBundlePath: $0) }
-]
-
 struct InputPermissionAlertBodyTests {
     @Test(
         "Names the running build when Accessibility is missing",
@@ -93,6 +88,9 @@ struct InputPermissionAlertBodyTests {
         #expect(accessibilityText.contains("click Start Cleaning Mode again"))
         #expect(accessibilityText.contains("its entry keeps showing itself as enabled while granting nothing"))
         #expect(refusedTapText.contains("Enable Ward under Privacy & Security → Input Monitoring"))
+        // A second action, not framing: the tap can be refused with Input
+        // Monitoring on and Accessibility since switched off.
+        #expect(refusedTapText.contains("(and confirm it is still enabled under Accessibility)"))
         #expect(refusedTapText.contains("quit and relaunch Ward first"))
         #expect(accessibilityText.contains("This copy of Ward is:"))
         #expect(refusedTapText.contains("This copy of Ward is:"))
@@ -107,19 +105,33 @@ struct InputPermissionAlertBodyTests {
     ///
     /// Asserted on both alerts: Accessibility granted through the terminal and
     /// the tap still refused is precisely how the second one gets reached.
-    @Test("Says so when the running build is not an app bundle at all", arguments: bothAlerts)
-    func flagsAnUnbundledBuild(alert: (String) -> String) {
-        let text = alert(unbundledBuildPath)
-        #expect(text.contains("\n\(unbundledBuildPath)\n"))
-        #expect(text.contains("not an app bundle"))
-        #expect(text.contains("Build and launch dist/Ward.app instead."))
+    @Test("Says so when the running build is not an app bundle at all")
+    func flagsAnUnbundledBuild() {
+        let accessibilityText = InputPermissionAlertBody
+            .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
+        let refusedTapText = InputPermissionAlertBody
+            .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
+        for text in [accessibilityText, refusedTapText] {
+            #expect(text.contains("\n\(unbundledBuildPath)\n"))
+            #expect(text.contains("not an app bundle"))
+            #expect(text.contains("Build and launch dist/Ward.app instead."))
+        }
     }
 
     /// There is nothing to add, so telling the user to add it back would
     /// contradict the paragraph directly above that says nothing can match.
-    @Test("Withholds the add-it-back escape when there is nothing to add", arguments: bothAlerts)
-    func withholdsRemediationForUnbundledBuild(alert: (String) -> String) {
-        #expect(!alert(unbundledBuildPath).contains(remediation))
+    @Test("Withholds the add-it-back escape when there is nothing to add")
+    func withholdsRemediationForUnbundledBuild() {
+        #expect(
+            !InputPermissionAlertBody
+                .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
+                .contains(remediation)
+        )
+        #expect(
+            !InputPermissionAlertBody
+                .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
+                .contains(remediation)
+        )
     }
 
     /// `awkwardPath` earns its place here: a predicate that keyed off spaces
@@ -141,8 +153,10 @@ struct InputPermissionAlertBodyTests {
         )
     }
 
-    /// The non-bundle branch nests its literal a level deeper than the rest, so
-    /// a stray indent there would reach the alert as visibly ragged text.
+    /// Every branch, though the non-bundle one is the hazard: it nests its
+    /// literal a level deeper than the rest, and Swift strips indentation
+    /// relative to the closing delimiter, so a stray indent there would reach
+    /// the alert as visibly ragged text that no `contains` check would notice.
     @Test(
         "Indents no rendered line, whatever the literals nest to",
         arguments: [homebrewInstallPath, unbundledBuildPath, awkwardPath, ""]
@@ -168,6 +182,12 @@ struct InputPermissionAlertBodyTests {
             .describeRefusedInputTap(runningBundlePath: blankPath)
         #expect(!accessibilityText.contains("This copy of Ward is"))
         #expect(!refusedTapText.contains("This copy of Ward is"))
+        // Nothing identified "this copy", so offering to add it back would
+        // dangle. Holds by construction — a blank path is never `.app` — which
+        // is exactly the kind of reasoning that let an earlier contradiction
+        // through, so it is asserted rather than argued.
+        #expect(!accessibilityText.contains(remediation))
+        #expect(!refusedTapText.contains(remediation))
         #expect(accessibilityText.contains("Accessibility"))
         #expect(refusedTapText.contains("Input Monitoring"))
     }
