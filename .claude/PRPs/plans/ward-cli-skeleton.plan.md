@@ -16,10 +16,10 @@ Ward's features are reachable only from a menu-bar app, and some of them (freein
 
 - **Complexity**: Medium
 - **Source PRD**: `.claude/PRPs/prds/homebrew-tap-and-cli.prd.md`
-- **PRD Phase**: Phase 1 — CLI skeleton
+- **PRD Phase**: Phase 3 — CLI skeleton (was Phase 1 before resequencing; install now leads)
 - **Estimated Files**: 8 (6 create, 2 update)
 
-> **Why Phase 1 and not Phase 0.** Phase 0 (formula spike) is a shell investigation — `brew audit`, install, upgrade, check whether Accessibility survives — with no code to plan. It is independent of this phase and should run in parallel. Its outcome can invalidate PRD Phase 4, not this one.
+> **Why this phase can run early.** Phase 0 (formula spike) is a shell investigation — `brew audit`, install, upgrade, check whether Accessibility survives — with no code to plan. It is independent of this phase and runs in parallel. One coupling runs the other way: if the spike finds Homebrew will not accept a formula installing only a `.app`, this phase becomes a prerequisite for the tap, because a formula shipping a `ward` binary is conventional and one shipping only an app is not.
 
 ---
 
@@ -179,7 +179,7 @@ enum WardApp {
 - **swift-argument-parser or any external dependency.** See Task 2 rationale.
 - **IPC with the menu-bar app.** The CLI never talks to a running Ward.
 - **Shell completions, man page, colour output.** Not needed to validate the phase.
-- **The Homebrew formula.** PRD Phase 4.
+- **The Homebrew formula.** PRD Phase 1 — and it may not need this phase at all.
 
 ---
 
