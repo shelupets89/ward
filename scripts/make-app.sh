@@ -33,8 +33,8 @@ cp "${BIN_PATH}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
 # MIT asks that the notice travel with every copy, and every channel ships this
 # bundle — the DMG stages it, the formula installs it. It has to precede
-# signing: `codesign --verify --strict`, which the formula's test runs, rejects
-# a file added to a sealed bundle.
+# signing: `codesign --verify --strict` rejects a file added to a sealed
+# bundle, and CI runs that check on this script's output.
 cp LICENSE "${APP_BUNDLE}/Contents/Resources/LICENSE"
 
 # `security` reaches for the login keychain, which isn't there over SSH or on a
