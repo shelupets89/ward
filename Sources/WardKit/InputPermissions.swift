@@ -16,9 +16,16 @@ public enum InputPermissions {
         promptSystemAccessibilityDialog()
         presentSettingsAlert(
             messageText: "Ward needs Accessibility access",
+            // "Enable Ward" is the obvious instruction and it is the wrong one
+            // after a rebuild: the previous build's entry is still listed, still
+            // switched on, and grants nothing, so following it changes nothing
+            // and gives no clue why.
             informativeText: """
             Blocking the keyboard and trackpad requires Accessibility access. Open System Settings → \
-            Privacy & Security → Accessibility, enable Ward, then click Start Cleaning Mode again.
+            Privacy & Security → Accessibility, then click Start Cleaning Mode again.
+
+            If Ward is already listed there, remove it with “−” and add it back. A rebuilt Ward is a \
+            new app to macOS, and the old entry keeps showing itself as enabled while granting nothing.
             """,
             settingsButtonTitle: "Open Accessibility Settings",
             settingsURLString: accessibilitySettingsURLString

@@ -45,8 +45,12 @@ class Ward < Formula
 
       Ward is ad-hoc signed, and macOS ties an Accessibility grant to the exact
       binary it was given. Every upgrade rebuilds Ward into a new one, so
-      Cleaning Mode needs Accessibility re-granted after each upgrade:
+      Cleaning Mode needs Accessibility granted again afterwards, under
       System Settings -> Privacy & Security -> Accessibility.
+
+      Remove the old Ward entry with "-" and add it back. Do not just flip its
+      switch: the stale entry goes on showing itself as enabled while granting
+      nothing, because it still names the previous build.
     EOS
   end
 
