@@ -16,8 +16,26 @@ jobs:
   release:
     name: Build and publish
     runs-on: macos-15
+    # GITHUB_REF_NAME is set on a manual dispatch too — to the branch the run
+    # was started from — so a `${GITHUB_REF_NAME:-inputs.tag}` fallback never
+    # reaches the input, and the tag box is silently ignored.
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+
+      # The tap is published by a later job, but a missing token discovered
+      # there would surface only after this job has made the release public —
+      # and the release notes tell people to `brew install`. Checking first is
+      # what makes that ordering claim true.
+      - name: Require the tap token before anything is published
+        env:
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        run: |
+          if [ -z "${TAP_PUSH_TOKEN}" ]; then
+            echo "::error::TAP_PUSH_TOKEN is not set. Create a fine-grained PAT with Contents:write on shelupets89/homebrew-ward and add it as a repository secret."
+            exit 1
+          fi
 
       - name: Test before releasing
         run: swift test
@@ -27,7 +45,6 @@ jobs:
 
       - name: Check tag matches the bundle version
         run: |
-          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
           BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Support/Info.plist)"
           if [ "${TAG}" != "v${BUNDLE_VERSION}" ]; then
             echo "::error::Tag ${TAG} does not match Info.plist version ${BUNDLE_VERSION}. Bump one of them."
@@ -38,7 +55,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
           gh release create "${TAG}" \
             dist/*.dmg \
             dist/*-INSTRUCTIONS.txt \
@@ -46,6 +62,17 @@ jobs:
             --generate-notes \
             --notes-file - <<'NOTES'
           ## Install
+
+          ```bash
+          brew install shelupets89/ward/ward
+          ```
+
+          This compiles Ward on your machine. Nothing is downloaded, so nothing is
+          quarantined, and there is no Gatekeeper dialog to get past. Homebrew prints
+          a `ln -s` line at the end to put it in `/Applications` — its sandbox is not
+          allowed to do that for you.
+
+          ## Or the download below
 
           Ward is **not notarized** (that needs a paid Apple Developer ID), so macOS
           will refuse to open the download:
@@ -65,8 +92,8 @@ jobs:
           Either route is you telling macOS to trust a file it cannot verify. Only do
           that if you trust the source.
 
-          **Cleanest alternative — build it yourself.** Locally built apps are never
-          quarantined, so there is no warning at all:
+          **Or build it by hand**, if you would rather not use Homebrew. Same
+          reason it works — a locally built app is never quarantined:
 
           ```bash
           git clone https://github.com/${{ github.repository }} && cd ward
@@ -75,3 +102,66 @@ jobs:
 
           See `INSTRUCTIONS.txt` below, and the README for first-run permissions.
           NOTES
+
+  update-tap:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: macos-15
+    # Nothing here writes to this repository — the only write is to the tap, via
+    # TAP_PUSH_TOKEN. This job runs `brew install`, which executes Homebrew's own
+    # Ruby against the network, so the ambient token it can reach should not be
+    # one that could rewrite Ward itself.
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+      TAP_REPO: shelupets89/homebrew-ward
+      FORMULA_PATH: Formula/ward.rb
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render the formula for this tag
+        run: |
+          brew tap-new shelupets89/ward --no-git
+          echo "RENDERED=$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/${FORMULA_PATH}" >> "${GITHUB_ENV}"
+
+      - name: Fill in the tag's url and checksum
+        run: bash scripts/render-formula.sh "${TAG}" "${RENDERED}"
+
+      # A formula is only as good as the install it produces, and the failure
+      # mode this guards against is silent: the tap keeps serving a formula that
+      # no longer builds. Testing before the push means a broken one never lands.
+      - name: Prove the formula installs
+        run: |
+          brew install --build-from-source shelupets89/ward/ward
+          brew test shelupets89/ward/ward
+
+      - name: Nothing downloaded means nothing quarantined
+        run: bash scripts/check-no-quarantine.sh "$(brew --prefix ward)/Ward.app"
+
+      - name: Publish the formula to the tap
+        env:
+          GH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        run: |
+          # `gh api` prints the error body to stdout on a non-2xx response, so
+          # `--jq .sha ... || true` hands the PUT a blob of JSON as the blob SHA
+          # — which is exactly what happens on the first release, when there is
+          # no formula to replace. Only a genuine 404 means "not there yet";
+          # anything else is a failure worth stopping for.
+          API_ERROR="${RUNNER_TEMP}/tap-sha-error.txt"
+          if CURRENT_SHA="$(gh api "repos/${TAP_REPO}/contents/${FORMULA_PATH}" --jq .sha 2> "${API_ERROR}")"; then
+            echo "Replacing the formula already in the tap (blob ${CURRENT_SHA})"
+          elif grep -q "HTTP 404" "${API_ERROR}"; then
+            CURRENT_SHA=""
+            echo "No formula in the tap yet — creating it"
+          else
+            echo "::error::Could not read ${TAP_REPO}/${FORMULA_PATH}:"
+            cat "${API_ERROR}"
+            exit 1
+          fi
+
+          gh api --method PUT "repos/${TAP_REPO}/contents/${FORMULA_PATH}" \
+            -f message="🍺 chore(formula): ward ${TAG}" \
+            -f content="$(base64 -i "${RENDERED}" | tr -d '\n')" \
+            ${CURRENT_SHA:+-f sha="${CURRENT_SHA}"} \
+            --jq .commit.html_url

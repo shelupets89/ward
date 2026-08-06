@@ -43,18 +43,22 @@ We'll know we're right when a colleague runs `brew install shelupets89/ward/ward
 | Metric | Target | How Measured |
 |--------|--------|--------------|
 | Gatekeeper dialogs during install | **0** | Fresh machine or fresh user account: install and launch, count prompts |
-| Steps from zero to running app | 1 command | `brew install shelupets89/ward/ward` |
+| Steps from zero to running app | 1 command | **Missed: 2.** `brew install shelupets89/ward/ward`, then the `ln -s` that `caveats` prints. Homebrew's sandbox makes one impossible for an app |
 | Update path | `brew upgrade ward` works with no manual step | Tag a release, bump formula, upgrade |
 | CLI feature coverage | ≥3 commands | `keep-awake`, `until`, `free-port` / `sleep-why` |
 | `Pure/` coverage after CLI lands | ≥85% (unchanged gate) | `scripts/coverage.sh` |
 
 ## Open Questions
 
-- [ ] Does `brew audit` accept a formula that installs a GUI `.app`? Formulae are conventionally CLI-only; casks own apps. **Needs a spike before committing to the approach.**
-- [ ] Where should the `.app` land — symlink into `/Applications`, or leave it in the Cellar and let the user link it? Affects whether TCC grants survive `brew upgrade`.
-- [ ] **How bad is the Accessibility re-grant after `brew upgrade`?** Not *whether* — `CLAUDE.md` already records ad-hoc rebuilds invalidating TCC as verified, and there is no mechanism by which `brew` would differ. The open question is whether it is painful enough to sink the approach.
-- [ ] Should the tap live in a second repo (`homebrew-ward`) or can it be a directory in this one? Homebrew expects `homebrew-<name>` as a repo name.
-- [ ] Is `ward` a safe binary name, or does it collide with something in common `PATH`s?
+Phases 0–2 answered these on 2026-08-06. Measurements in [#23](https://github.com/shelupets89/ward/pull/23); durable facts in `CLAUDE.md`.
+
+- [x] **Does `brew audit` accept a formula that installs a GUI `.app`?** Yes — `--new --strict --online` passes clean, checked against a negative control. The CLI-only convention is not enforced by any tool, so the phase order stands.
+- [x] **Where should the `.app` land?** The Cellar — there is no alternative. A formula may not write to `/Applications`: `post_install` is sandboxed (`Errno::EPERM`) and `Keg.keg_link_directories` is `bin etc include lib sbin share var`. The user runs one `ln -s`, printed by `caveats`.
+- [x] **How bad is the Accessibility re-grant after `brew upgrade`?** It always happens: the Cellar path moves with the version and the ad-hoc CDHash moves with the rebuild, so both TCC keys change. One toggle per upgrade — not enough to sink a personal utility, and documented everywhere a user would look. The `/Applications` symlink survives untouched.
+- [x] **Should the tap live in a second repo?** It must — `brew tap shelupets89/ward` resolves to `github.com/shelupets89/homebrew-ward`. A directory in this repo cannot serve as a tap.
+- [x] **Is `ward` a safe name?** No `ward` in homebrew-core, so the formula name does not collide. The *binary* name question is Phase 3's.
+
+**A question nobody thought to ask:** Homebrew 5.x requires tap trust, and the two install forms differ. `brew install shelupets89/ward/ward` auto-trusts and needs no interaction; `brew tap` followed by `brew install ward` is refused outright. Always document the fully-qualified command.
 
 ---
 
@@ -96,12 +100,12 @@ When a colleague tells me about a tool they built, I want to install it with one
 ### User Flow
 
 ```
-brew tap shelupets89/ward
-brew install ward
+brew install shelupets89/ward/ward       # fully qualified — the short form is refused
 # → compiles locally, no download, no Gatekeeper
-ward until npm run build      # terminal path
-open -a Ward                  # menu-bar path
-brew upgrade ward             # self-update
+ln -s "$(brew --prefix ward)/Ward.app" /Applications   # brew cannot do this itself
+open /Applications/Ward.app   # menu-bar path
+ward until npm run build      # terminal path (Phase 4)
+brew upgrade ward             # self-update; re-grant Accessibility after
 ```
 
 ---
@@ -132,9 +136,9 @@ brew upgrade ward             # self-update
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 0 | Formula spike | Prove `brew audit` accepts a source formula installing a `.app`; measure the TCC re-grant cost; settle where the app lands | pending | - | - | - |
-| 1 | **Tap + formula** | `homebrew-ward` repo, source-building formula, README install section. **`brew install` gives you the app** | pending | - | 0 | - |
-| 2 | Release automation | Formula version bump on release tag, so the install path doesn't rot | pending | - | 1 | - |
+| 0 | Formula spike | Prove `brew audit` accepts a source formula installing a `.app`; measure the TCC re-grant cost; settle where the app lands | **done** | - | - | [#23](https://github.com/shelupets89/ward/pull/23) |
+| 1 | **Tap + formula** | `homebrew-ward` repo, source-building formula, README install section. **`brew install` gives you the app** | **done** | - | 0 | [#23](https://github.com/shelupets89/ward/pull/23) |
+| 2 | Release automation | Formula version bump on release tag, so the install path doesn't rot | **done** | - | 1 | [#23](https://github.com/shelupets89/ward/pull/23) |
 | 3 | CLI skeleton | `ward` executable target, arg parsing, `--version`, `--help` | pending | with 1, 2 | - | [ward-cli-skeleton](../plans/ward-cli-skeleton.plan.md) |
 | 4 | `ward until <cmd>` | Wrap a command, hold an assertion for its lifetime | pending | - | 3 | - |
 | 5 | `free-port`, `sleep-why` | Remaining terminal-shaped commands | pending | - | 3 | - |
@@ -200,4 +204,4 @@ Ward is already one library target per feature (`Features/<Name>/Sources`), all 
 ---
 
 *Generated: 2026-08-05*
-*Status: DRAFT — Phase 0 must resolve the two Homebrew open questions before Phase 4 is committed to*
+*Status: Phases 0–2 shipped 2026-08-06. Every Homebrew open question is answered above; phases 3–5 (the CLI) remain.*

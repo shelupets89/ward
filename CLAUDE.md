@@ -56,6 +56,18 @@ Launch the built `.app`, never `swift run` — TCC grants attach to whatever lau
 - No code-signing identity exists. Forces ad-hoc signing, re-granting Accessibility after rebuilds, blocks `SMAppService`. Several designs exist only because of this.
 - Touch ID via `LAContext` is an **intent gate, not a privilege boundary**. Never describe it as security.
 
+### Homebrew (verified during the Phase 0 spike)
+
+- `brew audit --new --strict --online` **accepts a formula whose only payload is a `.app`**. Verified with a negative control, so the clean pass is real, not a skipped audit. The "formulae are CLI-only, apps belong in casks" convention is not enforced by any tool.
+- SwiftPM evaluates `Package.swift` inside its own `sandbox-exec` sandbox, and the kernel refuses to nest that inside Homebrew's build sandbox. It surfaces as `Invalid manifest` with `sandbox_apply: Operation not permitted` buried underneath. `swift build --disable-sandbox` is the only fix — there is no environment variable for it. `make-app.sh` takes `WARD_DISABLE_SWIFTPM_SANDBOX=1`.
+- **A formula cannot put anything in `/Applications`.** `post_install` runs sandboxed and `/Applications` is not on the allowlist (`Errno::EPERM`, observed), and `Keg.keg_link_directories` is `bin etc include lib sbin share var` — no linking mechanism reaches it. The symlink is the user's step; `caveats` prints it.
+- A brew-installed Ward carries **no `com.apple.quarantine`** — only `com.apple.provenance`, which does not gate launch. Verified: launches with no Gatekeeper dialog and no `com.apple.syspolicy` activity at all, despite `spctl -a` still returning `rejected`. Quarantine is what makes macOS run that assessment on open; with no quarantine the rejection is never consulted. (`spctl` run by hand still consults it — the claim is about the launch path, not about Gatekeeper being unreachable.)
+- Homebrew 5.x requires **tap trust**, and the two forms are not equivalent. `brew install shelupets89/ward/ward` auto-trusts that one formula and needs no interaction, even with stdin closed. `brew tap` followed by `brew install ward` fails outright: *"Refusing to load formula … from untrusted tap"*. Always document the fully-qualified command — the two-step form in the PRD's user flow does not work.
+- `brew upgrade` **replaces both halves of the app's TCC identity**, measured across 0.2.0 → 0.2.1: the Cellar path changes with the version, and the ad-hoc CDHash changes with the rebuild. An Accessibility grant cannot survive it. The `/Applications` symlink does survive, because it points at the version-independent `opt` path.
+- **A brew-installed Ward and a local `dist/Ward.app` are two different apps to macOS**, each needing its own Accessibility grant, and both show up in the pane as plain "Ward" with nothing to tell them apart. Running `make-app.sh` mid-session silently swaps which one is under test. **When Accessibility "is on" but `AXIsProcessTrusted()` is false, check which binary is actually running before anything else** — `lsappinfo info -only bundlepath <pid>`. Not checking that first cost most of an afternoon once.
+- A stale Accessibility entry keeps showing its toggle **on** while granting nothing, so "just enable it" is the wrong advice after a rebuild — remove it with `−` and add it back.
+- `/Library/Application Support/com.apple.TCC/TCC.db` is unreadable even with `sudo`, and `tccd` redacts its log messages. **Its mtime is readable**, uses no WAL sidecar files, and is therefore the one usable signal for "was a grant written since X" — compare it against the executable's build time.
+
 ## Non-negotiables
 
 - Never write to `/etc/sudoers.d` or `/etc/pam.d` without validating the staged file first.

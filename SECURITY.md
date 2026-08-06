@@ -48,3 +48,5 @@ Please don't report these as vulnerabilities — they're documented trade-offs:
 ## Scope
 
 Ward has no network code, no telemetry, no accounts, and no dependencies. Reports about data exfiltration or supply-chain risk in dependencies do not apply — there are none.
+
+One thing does sit in the trust chain: the Homebrew tap. `brew install shelupets89/ward/ward` builds whatever source the formula in [`shelupets89/homebrew-ward`](https://github.com/shelupets89/homebrew-ward) points at, and `brew upgrade` does it again without the user looking at this repository. That formula is written only by the release workflow, using a fine-grained `TAP_PUSH_TOKEN` scoped to `Contents: write` on the tap and nothing else, and it pins an exact tarball by `sha256`. Write access to the tap repo, or that token, is therefore worth the same scrutiny as write access here. Reports about either are in scope.
