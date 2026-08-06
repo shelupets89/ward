@@ -15,8 +15,8 @@ public enum InputPermissionAlertBody {
     public static func describeMissingAccessibility(runningBundlePath: String) -> String {
         guard isRunningUnbundled(runningBundlePath) else {
             return """
-            Blocking the keyboard and trackpad requires Accessibility access. Open System \
-            Settings → Privacy & Security → Accessibility, then click Start Cleaning Mode again.
+            \(accessibilityRequired) Open System Settings → Privacy & Security → Accessibility, \
+            then click Start Cleaning Mode again.
 
             \(discloseRunningBuild(runningBundlePath))macOS grants access to one exact build. A \
             Ward already listed there — another install, or this one before a rebuild — is a \
@@ -25,8 +25,8 @@ public enum InputPermissionAlertBody {
             """
         }
         return """
-        Blocking the keyboard and trackpad requires Accessibility access, granted under System \
-        Settings → Privacy & Security → Accessibility.
+        \(accessibilityRequired) It is granted under System Settings → Privacy & Security → \
+        Accessibility.
 
         \(explainUnbundledGrant(runningBundlePath))
         """
@@ -35,9 +35,9 @@ public enum InputPermissionAlertBody {
     public static func describeRefusedInputTap(runningBundlePath: String) -> String {
         guard isRunningUnbundled(runningBundlePath) else {
             return """
-            macOS refused the input-blocking tap. Enable Ward under Privacy & Security → Input \
-            Monitoring (and confirm it is still enabled under Accessibility), then try again. If \
-            you just granted access, quit and relaunch Ward first.
+            \(tapRefused) Enable Ward under Privacy & Security → Input Monitoring (and confirm it \
+            is still enabled under Accessibility), then try again. If you just granted access, \
+            quit and relaunch Ward first.
 
             \(discloseRunningBuild(runningBundlePath))macOS grants access to one exact build, so a \
             Ward already listed under either pane may be a different app whose grant does not \
@@ -45,12 +45,19 @@ public enum InputPermissionAlertBody {
             """
         }
         return """
-        macOS refused the input-blocking tap. It needs Privacy & Security → Input Monitoring, and \
-        Accessibility alongside it.
+        \(tapRefused) It needs Privacy & Security → Input Monitoring, with Accessibility still \
+        enabled alongside it.
 
         \(explainUnbundledGrant(runningBundlePath))
         """
     }
+
+    /// Restated in two bodies each, so they are written once. The remediation
+    /// sentence drifted when it was not, and these carry no conditional meaning
+    /// to get out of step with — they only say what happened.
+    private static let accessibilityRequired =
+        "Blocking the keyboard and trackpad requires Accessibility access."
+    private static let tapRefused = "macOS refused the input-blocking tap."
 
     /// Shared by both alerts so the two cannot drift apart, which the remediation
     /// sentence already did once.
@@ -71,8 +78,9 @@ public enum InputPermissionAlertBody {
         \(bundlePath)
 
         That is not an app bundle, so the grant belongs to whatever launched it — usually your \
-        terminal — and not to Ward. Enable that in the list and run Ward again, or build and \
-        launch dist/Ward.app and grant Ward itself.
+        terminal — and not to Ward. If you recognise it under Privacy & Security, enable it there \
+        and try again, quitting Ward first if it stays refused. Otherwise, build and launch \
+        dist/Ward.app and grant Ward itself.
         """
     }
 

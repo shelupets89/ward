@@ -154,7 +154,29 @@ struct InputPermissionAlertBodyTests {
             // Xcode's attribution has never been measured here, unlike the
             // terminal's, so the copy must not name it as though it had.
             #expect(!text.contains("Xcode"))
+            // "usually" hedges who launched it; the instruction has to hedge
+            // whether there is anything to enable at all. A build started by
+            // launchd has no findable app, and a bare imperative would send that
+            // reader hunting for an entry that does not exist.
+            #expect(text.contains("If you recognise it under Privacy & Security"))
+            // Whether a grant to the launcher reaches an already-running child
+            // is unverified here — checking it means writing real TCC state — so
+            // the relaunch is offered as a fallback, not asserted as a step.
+            #expect(text.contains("if it stays refused"))
         }
+    }
+
+    /// By the time the tap alert can fire, `ensureAccessibilityGranted` has
+    /// already returned true, so Accessibility is granted and only Input
+    /// Monitoring is outstanding. Presenting both as missing sends the reader to
+    /// recheck something that is already satisfied.
+    @Test("Keeps Accessibility framed as already granted in the tap alert", arguments: [localBuildPath, unbundledBuildPath])
+    func keepsAccessibilityFramedAsGrantedInTapAlert(bundlePath: String) {
+        #expect(
+            InputPermissionAlertBody
+                .describeRefusedInputTap(runningBundlePath: bundlePath)
+                .contains("still enabled")
+        )
     }
 
     /// A stale Ward entry is not an unbundled build's problem — it was just told
