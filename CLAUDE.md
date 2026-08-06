@@ -56,6 +56,13 @@ Launch the built `.app`, never `swift run` — TCC grants attach to whatever lau
 - No code-signing identity exists. Forces ad-hoc signing, re-granting Accessibility after rebuilds, blocks `SMAppService`. Several designs exist only because of this.
 - Touch ID via `LAContext` is an **intent gate, not a privilege boundary**. Never describe it as security.
 
+### Homebrew (verified during the Phase 0 spike)
+
+- `brew audit --new --strict --online` **accepts a formula whose only payload is a `.app`**. Verified with a negative control, so the clean pass is real, not a skipped audit. The "formulae are CLI-only, apps belong in casks" convention is not enforced by any tool.
+- SwiftPM evaluates `Package.swift` inside its own `sandbox-exec` sandbox, and the kernel refuses to nest that inside Homebrew's build sandbox. It surfaces as `Invalid manifest` with `sandbox_apply: Operation not permitted` buried underneath. `swift build --disable-sandbox` is the only fix — there is no environment variable for it. `make-app.sh` takes `WARD_DISABLE_SWIFTPM_SANDBOX=1`.
+- **A formula cannot put anything in `/Applications`.** `post_install` runs sandboxed and `/Applications` is not on the allowlist (`Errno::EPERM`, observed), and `Keg.keg_link_directories` is `bin etc include lib sbin share var` — no linking mechanism reaches it. The symlink is the user's step; `caveats` prints it.
+- A brew-installed Ward carries **no `com.apple.quarantine`** — only `com.apple.provenance`, which does not gate launch. Verified: launches with no Gatekeeper dialog and no `com.apple.syspolicy` activity at all, despite `spctl -a` still returning `rejected`. Gatekeeper assessment is what quarantine *triggers*; with no quarantine the rejection is never consulted.
+
 ## Non-negotiables
 
 - Never write to `/etc/sudoers.d` or `/etc/pam.d` without validating the staged file first.

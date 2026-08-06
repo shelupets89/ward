@@ -4,7 +4,21 @@ A macOS menu-bar utility for things macOS makes hard. No Dock icon, no window, n
 
 ## Install
 
-**Build it yourself** — locally built apps aren't quarantined, so there's no Gatekeeper warning. Needs Xcode or `xcode-select --install`.
+```bash
+brew install shelupets89/ward/ward
+```
+
+This compiles Ward on your machine rather than downloading it. Nothing downloaded means nothing carries `com.apple.quarantine`, which is the only reason Gatekeeper would ever be consulted — so there's no security dialog at any point. That matters here: Ward isn't notarized, and the dialog it would otherwise produce has no Open button. Needs Xcode Command Line Tools (`xcode-select --install`), and takes about 30 seconds to build.
+
+Homebrew's install sandbox isn't permitted to write to `/Applications`, so the last step is yours. `brew install` prints it when it finishes:
+
+```bash
+ln -s "$(brew --prefix ward)/Ward.app" /Applications && open /Applications/Ward.app
+```
+
+Update with `brew upgrade ward` — the symlink follows, so it's a one-time step. **The Accessibility grant does not survive an upgrade**: Ward is ad-hoc signed, every upgrade rebuilds it into a binary macOS considers a different app, and grants are tied to the binary. Cleaning Mode needs re-granting each time.
+
+**Without Homebrew**, build it by hand — same reason it works, no quarantine on a local build:
 
 ```bash
 git clone https://github.com/shelupets89/ward.git && cd ward && bash scripts/make-app.sh && open dist/Ward.app
@@ -55,7 +69,7 @@ Each feature explains its own permissions on first use. Cleaning Mode needs **Ac
 | --- | --- |
 | "Apple could not verify…" | Downloaded copy — see the release notes, or build from source |
 | Cleaning Mode does nothing | Accessibility not granted, or granted to your terminal via `swift run` |
-| Stopped working after a rebuild | Ad-hoc signing makes each build a new app — re-add it in Accessibility |
+| Stopped working after a rebuild or `brew upgrade` | Ad-hoc signing makes each build a new app — re-add it in Accessibility |
 | Stuck in Cleaning Mode | `killall Ward` over SSH, or hold the power button |
 | Mac won't sleep | Menu → **Restore Normal Sleep**. By hand: `sudo pmset -a disablesleep 0` |
 | "Port N belongs to another user" | Ward only stops your own processes. Free it yourself: `sudo lsof -ti tcp:N \| xargs sudo kill` |
