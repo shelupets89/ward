@@ -49,8 +49,9 @@ public enum KillEscalation {
         /// The port is still held, by everything still on it. The three lists
         /// mean different things and the user needs all of them: `signalled`
         /// outlived a delivered SIGKILL, `undelivered` never received one
-        /// (macOS refused, or the call failed), `untouched` was never approved
-        /// and so was never signalled at all.
+        /// (macOS refused, or the call failed), `untouched` was not in the
+        /// SIGKILL batch — never approved, or approved but absent when the
+        /// batch was built and back on the port by the time it was read.
         ///
         /// They are one case rather than three outcomes because every earlier
         /// shape here reported a subset and silently dropped the rest — three
