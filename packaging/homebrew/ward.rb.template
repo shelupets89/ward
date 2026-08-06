@@ -1,0 +1,65 @@
+class Ward < Formula
+  desc "Menu-bar utility for things macOS makes hard"
+  homepage "https://github.com/shelupets89/ward"
+  url "__URL__"
+  sha256 "__SHA256__"
+  head "https://github.com/shelupets89/ward.git", branch: "main"
+
+  livecheck do
+    url :stable
+    strategy :github_latest
+  end
+
+  depends_on macos: :ventura
+
+  # Compiling on the installing machine is the whole point, not an
+  # implementation detail. A downloaded .app carries com.apple.quarantine, and
+  # Ward has no Developer ID to satisfy the Gatekeeper check that follows — the
+  # dialog it produces offers no Open button. Nothing built here was
+  # downloaded, so nothing is quarantined and the app simply opens.
+  def install
+    # SwiftPM evaluates Package.swift inside its own sandbox-exec sandbox, and
+    # the kernel refuses to nest that inside Homebrew's. Without this the build
+    # fails as an unexplained "Invalid manifest".
+    ENV["WARD_DISABLE_SWIFTPM_SANDBOX"] = "1"
+    system "bash", "scripts/make-app.sh"
+    prefix.install "dist/Ward.app"
+  end
+
+  # Homebrew's post-install sandbox cannot write to /Applications, and linking
+  # an app is not something a formula can express, so the symlink is the user's
+  # one manual step.
+  def caveats
+    <<~EOS
+      Ward.app was compiled on this machine, so it carries no quarantine flag
+      and opens with no Gatekeeper dialog. Link it into /Applications:
+
+        ln -s #{opt_prefix}/Ward.app /Applications
+        open /Applications/Ward.app
+
+      The link tracks whichever version is current, so `brew upgrade ward`
+      needs no relink. `brew uninstall ward` leaves it dangling:
+
+        rm /Applications/Ward.app
+
+      Ward is ad-hoc signed, and macOS ties an Accessibility grant to the exact
+      binary it was given. Every upgrade rebuilds Ward into a new one, so
+      Cleaning Mode needs Accessibility re-granted after each upgrade:
+      System Settings -> Privacy & Security -> Accessibility.
+    EOS
+  end
+
+  test do
+    app = prefix/"Ward.app"
+    assert_path_exists app/"Contents/MacOS/Ward"
+
+    # The bundle must stay signed: an unsigned binary is one macOS refuses to
+    # keep an Accessibility grant for at all.
+    system "codesign", "--verify", "--strict", app
+
+    bundle_version = shell_output(
+      "/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' #{app}/Contents/Info.plist",
+    ).strip
+    assert_equal version.to_s, bundle_version
+  end
+end

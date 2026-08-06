@@ -5,10 +5,19 @@ cd "$(dirname "$0")/.."
 
 APP_NAME="Ward"
 
-echo "Building ${APP_NAME} (release)…"
-swift build -c release
+# SwiftPM evaluates Package.swift inside its own sandbox-exec sandbox. The
+# Homebrew formula already builds inside one, and the kernel refuses to nest
+# them — "sandbox_apply: Operation not permitted", surfacing as an unexplained
+# "Invalid manifest". The formula sets this to opt out of the inner sandbox.
+SANDBOX_FLAGS=()
+if [ -n "${WARD_DISABLE_SWIFTPM_SANDBOX:-}" ]; then
+    SANDBOX_FLAGS+=(--disable-sandbox)
+fi
 
-BIN_PATH="$(swift build -c release --show-bin-path)"
+echo "Building ${APP_NAME} (release)…"
+swift build -c release "${SANDBOX_FLAGS[@]+"${SANDBOX_FLAGS[@]}"}"
+
+BIN_PATH="$(swift build -c release --show-bin-path "${SANDBOX_FLAGS[@]+"${SANDBOX_FLAGS[@]}"}")"
 APP_BUNDLE="dist/${APP_NAME}.app"
 
 rm -rf "${APP_BUNDLE}"
