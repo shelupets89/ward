@@ -32,8 +32,11 @@ fi
 # — which reads as "no match" and passes the check on a bundle that is in fact
 # quarantined. Only shows up once the listing is long enough to still be
 # writing, so it survives every small test case.
+# `xattr -r` prints "path: attribute", so the colon anchors the match to the
+# attribute rather than the path — a file merely named com.apple.quarantine
+# would otherwise fail a bundle that is perfectly clean.
 case "${ATTRIBUTES}" in
-    *com.apple.quarantine*)
+    *": com.apple.quarantine"*)
         echo "::error::${APP_BUNDLE} carries com.apple.quarantine — the install path no longer avoids Gatekeeper." >&2
         exit 1
         ;;
