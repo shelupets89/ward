@@ -94,4 +94,4 @@ One library target per feature under `Features/`, each depending on `WardKit` an
 
 **Logic that is a function of its inputs goes in a `Pure/` directory.** The coverage gate finds those automatically — no list to maintain.
 
-[CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [CLAUDE.md](CLAUDE.md)
+[MIT licensed](LICENSE) — use it, change it, ship it, keep the notice. [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [CLAUDE.md](CLAUDE.md)

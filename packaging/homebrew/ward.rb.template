@@ -3,6 +3,7 @@ class Ward < Formula
   homepage "https://github.com/shelupets89/ward"
   url "__URL__"
   sha256 "__SHA256__"
+  license "MIT"
 
   # Deliberately no `head` spec. Everything else here exists to pin one
   # checksummed tarball, and `--HEAD` would offer an unpinned path around that.
@@ -57,6 +58,10 @@ class Ward < Formula
   test do
     app = prefix/"Ward.app"
     assert_path_exists app/"Contents/MacOS/Ward"
+
+    # codesign seals whatever is in the bundle, so one built without the notice
+    # verifies perfectly — presence is the half the check below cannot catch.
+    assert_path_exists app/"Contents/Resources/LICENSE"
 
     # The bundle must stay signed: an unsigned binary is one macOS refuses to
     # keep an Accessibility grant for at all.
