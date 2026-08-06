@@ -41,13 +41,21 @@ public enum KillEscalation {
         /// says Ward never had anything to stop here — telling the user that
         /// after a successful kill makes a working action look like a failure.
         case freedThenTakenByAnotherUser
-        /// The port is still held. Both lists are reported because they mean
-        /// different things and the user needs each: `signalled` outlived a
-        /// delivered SIGKILL, `undelivered` never received one — macOS refused
-        /// or the call failed. Carrying them in one case is deliberate; an
-        /// earlier shape returned only the undelivered ones and silently
-        /// dropped a process that was still holding the port.
-        case stillHeld(signalled: [ListeningProcess], undelivered: [ListeningProcess])
+        /// The port is still held, by everything still on it. The three lists
+        /// mean different things and the user needs all of them: `signalled`
+        /// outlived a delivered SIGKILL, `undelivered` never received one
+        /// (macOS refused, or the call failed), `untouched` was never approved
+        /// and so was never signalled at all.
+        ///
+        /// They are one case rather than three outcomes because every earlier
+        /// shape here reported a subset and silently dropped the rest — three
+        /// times over. "Show everything still on the port" is the same rule as
+        /// "show everything about to die", and a partition cannot forget a row.
+        case stillHeld(
+            signalled: [ListeningProcess],
+            undelivered: [ListeningProcess],
+            untouched: [ListeningProcess]
+        )
         /// The approved processes are gone, but something that was never
         /// signalled is on the port now — typically a supervisor restarting the
         /// server inside the grace period. Kept apart from `stillHeld` because
@@ -75,11 +83,14 @@ public enum KillEscalation {
             // the branch above, under its own outcome.
             let signalledTargets = Set(targets)
             let survivors = snapshot.holders.filter { signalledTargets.contains($0.processIdentifier) }
-            let undelivered = survivors.filter { undeliveredTargets.contains($0.processIdentifier) }
             return .report(
                 .stillHeld(
                     signalled: survivors.filter { !undeliveredTargets.contains($0.processIdentifier) },
-                    undelivered: undelivered
+                    undelivered: survivors.filter { undeliveredTargets.contains($0.processIdentifier) },
+                    // Whatever else is on the port: a stranger that arrived
+                    // during the settling window, or another user's process.
+                    // Never signalled, but still the answer to "is it free?".
+                    untouched: snapshot.holders.filter { !signalledTargets.contains($0.processIdentifier) }
                 )
             )
         }

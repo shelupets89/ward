@@ -85,7 +85,7 @@ struct FreePortMessagesTests {
 
     @Test("Names the survivors when a port stays held")
     func namesSurvivors() {
-        let text = FreePortMessages.outcome(.stillHeld(signalled: [server], undelivered: []), port: 3001)
+        let text = FreePortMessages.outcome(.stillHeld(signalled: [server], undelivered: [], untouched: []), port: 3001)
         #expect(text.body.contains("node (pid 26036)"))
         #expect(text.body.contains("SIGKILL"))
     }
@@ -93,7 +93,7 @@ struct FreePortMessagesTests {
     @Test("Names both a wedged survivor and an undelivered one, dropping neither")
     func namesBothKindsOfSurvivor() {
         let text = FreePortMessages.outcome(
-            .stillHeld(signalled: [server], undelivered: [worker]),
+            .stillHeld(signalled: [server], undelivered: [worker], untouched: []),
             port: 3001
         )
         #expect(text.body.contains("node (pid 26036)"))
@@ -105,7 +105,7 @@ struct FreePortMessagesTests {
     @Test("Says an undelivered signal was never sent, not that it was survived")
     func doesNotCallAnUndeliveredSignalSurvived() {
         let text = FreePortMessages.outcome(
-            .stillHeld(signalled: [], undelivered: [server]),
+            .stillHeld(signalled: [], undelivered: [server], untouched: []),
             port: 3001
         )
         #expect(text.body.contains("node (pid 26036)"))
@@ -113,11 +113,32 @@ struct FreePortMessagesTests {
         #expect(!text.body.contains("survived"))
     }
 
+    @Test("Names an untouched late arrival alongside the survivors")
+    func namesUntouchedHoldersToo() {
+        let text = FreePortMessages.outcome(
+            .stillHeld(signalled: [server], undelivered: [], untouched: [daemon]),
+            port: 3001
+        )
+        #expect(text.body.contains("node (pid 26036)"))
+        #expect(text.body.contains("sshd (pid 431)"))
+        #expect(text.body.contains("never signalled"))
+    }
+
+    @Test("Hedges the cause of an undelivered signal rather than asserting it")
+    func doesNotAssertACauseItCannotKnow() {
+        let text = FreePortMessages.outcome(
+            .stillHeld(signalled: [], undelivered: [server], untouched: []),
+            port: 3001
+        )
+        #expect(text.body.contains("can mean"))
+        #expect(!text.body.contains("usually means"))
+    }
+
     @Test("Agrees in number across both survivor lists")
     func stillHeldTextAgreesInNumber() {
-        let single = FreePortMessages.outcome(.stillHeld(signalled: [server], undelivered: [worker]), port: 3001)
+        let single = FreePortMessages.outcome(.stillHeld(signalled: [server], undelivered: [worker], untouched: []), port: 3001)
         let several = FreePortMessages.outcome(
-            .stillHeld(signalled: [server, worker], undelivered: [server, worker]),
+            .stillHeld(signalled: [server, worker], undelivered: [server, worker], untouched: []),
             port: 3001
         )
         #expect(single.body.contains("This survived"))

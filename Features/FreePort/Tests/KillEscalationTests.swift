@@ -138,15 +138,36 @@ struct KillEscalationTests {
         #expect(afterForceKill == .report(.takenByAnotherProcess([squatter])))
     }
 
-    @Test("Reports only the signalled pids as survivors, not a stranger that arrived late")
-    func reportsOnlySignalledPidsAsSurvivors() {
+    @Test("Names a late arrival as untouched rather than as a survivor — and never omits it")
+    func separatesALateArrivalFromASurvivorWithoutDroppingIt() {
         let survivor = ownedProcess(pid: 26036)
         let lateArrival = ownedProcess(command: "python3", pid: 55555)
         let step = nextStep(
             stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []),
             snapshot: snapshot([survivor, lateArrival])
         )
-        #expect(step == .report(.stillHeld(signalled: [survivor], undelivered: [])))
+        #expect(step == .report(.stillHeld(signalled: [survivor], undelivered: [], untouched: [lateArrival])))
+    }
+
+    @Test("Accounts for every holder on the port, splitting them three ways")
+    func partitionsEveryHolderIntoExactlyOneList() {
+        let survivor = ownedProcess(pid: 26036)
+        let undeliveredProcess = ownedProcess(command: "coreaudiod", pid: 26037)
+        let lateArrival = ownedProcess(command: "python3", pid: 55555)
+        let daemon = rootProcess(pid: 431, port: 3001)
+        let holders = [survivor, undeliveredProcess, lateArrival, daemon]
+        let step = nextStep(
+            stage: .afterForceKill(approvedTargets: [26036, 26037], undeliveredTargets: [26037]),
+            snapshot: snapshot(holders)
+        )
+        guard case .report(.stillHeld(let signalled, let undelivered, let untouched)) = step else {
+            Issue.record("expected a stillHeld report, got \(step)")
+            return
+        }
+        #expect(signalled == [survivor])
+        #expect(undelivered == [undeliveredProcess])
+        #expect(untouched == [lateArrival, daemon])
+        #expect(signalled.count + undelivered.count + untouched.count == holders.count)
     }
 
     @Test("Reports rather than escalating when only another user's process survives")
@@ -183,7 +204,7 @@ struct KillEscalationTests {
             stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: [26036]),
             snapshot: snapshot([protectedProcess])
         )
-        #expect(step == .report(.stillHeld(signalled: [], undelivered: [protectedProcess])))
+        #expect(step == .report(.stillHeld(signalled: [], undelivered: [protectedProcess], untouched: [])))
     }
 
     @Test("Reports both a wedged survivor and an undelivered one, dropping neither")
@@ -194,21 +215,21 @@ struct KillEscalationTests {
             stage: .afterForceKill(approvedTargets: [26036, 26037], undeliveredTargets: [26036]),
             snapshot: snapshot([undeliveredProcess, wedgedProcess])
         )
-        #expect(step == .report(.stillHeld(signalled: [wedgedProcess], undelivered: [undeliveredProcess])))
+        #expect(step == .report(.stillHeld(signalled: [wedgedProcess], undelivered: [undeliveredProcess], untouched: [])))
     }
 
     @Test("Reports still-held when survivors outlive SIGKILL")
     func reportsStillHeldWhenSurvivorsPersist() {
         let survivors = [ownedProcess(pid: 26036)]
         let step = nextStep(stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []), snapshot: snapshot(survivors))
-        #expect(step == .report(.stillHeld(signalled: survivors, undelivered: [])))
+        #expect(step == .report(.stillHeld(signalled: survivors, undelivered: [], untouched: [])))
     }
 
     @Test("Never escalates past SIGKILL")
     func neverEscalatesPastForceKill() {
         let survivor = ownedProcess(pid: 26036)
         let step = nextStep(stage: .afterForceKill(approvedTargets: [26036], undeliveredTargets: []), snapshot: snapshot([survivor]))
-        #expect(step == .report(.stillHeld(signalled: [survivor], undelivered: [])))
+        #expect(step == .report(.stillHeld(signalled: [survivor], undelivered: [], untouched: [])))
     }
 
     @Test("Treats a process that vanished on its own as success, not as an error")
