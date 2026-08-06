@@ -111,11 +111,33 @@ struct InputPermissionAlertBodyTests {
             .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
         let refusedTapText = InputPermissionAlertBody
             .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
-        for text in [accessibilityText, refusedTapText] {
-            #expect(text.contains("\n\(unbundledBuildPath)\n"))
-            #expect(text.contains("not an app bundle"))
-            #expect(text.contains("Build and launch dist/Ward.app instead."))
-        }
+        // Written out rather than looped: a loop variable would print as `text`
+        // on failure, where these names say which alert broke.
+        #expect(accessibilityText.contains("Ward is running from:"))
+        #expect(accessibilityText.contains("\n\(unbundledBuildPath)\n"))
+        #expect(accessibilityText.contains("not an app bundle"))
+        #expect(accessibilityText.contains("Build and launch dist/Ward.app instead."))
+        #expect(refusedTapText.contains("Ward is running from:"))
+        #expect(refusedTapText.contains("\n\(unbundledBuildPath)\n"))
+        #expect(refusedTapText.contains("not an app bundle"))
+        #expect(refusedTapText.contains("Build and launch dist/Ward.app instead."))
+    }
+
+    /// Sending an unbundled build to a Settings pane is a detour the next
+    /// paragraph has to talk the reader back out of — and that reader is the
+    /// only one this branch was written for.
+    @Test("Withholds the pane instruction a build that cannot be listed cannot act on")
+    func withholdsPaneInstructionForUnbundledBuild() {
+        #expect(
+            !InputPermissionAlertBody
+                .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
+                .contains("Open System Settings → Privacy & Security → Accessibility")
+        )
+        #expect(
+            !InputPermissionAlertBody
+                .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
+                .contains("Enable Ward under Privacy & Security → Input Monitoring")
+        )
     }
 
     /// There is nothing to add, so telling the user to add it back would
@@ -188,8 +210,10 @@ struct InputPermissionAlertBodyTests {
         // through, so it is asserted rather than argued.
         #expect(!accessibilityText.contains(remediation))
         #expect(!refusedTapText.contains(remediation))
-        #expect(accessibilityText.contains("Accessibility"))
-        #expect(refusedTapText.contains("Input Monitoring"))
+        // A blank path says nothing about whether the build could be listed, so
+        // unlike a visibly unbundled one it still gets the instruction.
+        #expect(accessibilityText.contains("Open System Settings → Privacy & Security → Accessibility"))
+        #expect(refusedTapText.contains("Enable Ward under Privacy & Security → Input Monitoring"))
     }
 
     /// A tripwire for one specific word, not proof against the whole class. The
