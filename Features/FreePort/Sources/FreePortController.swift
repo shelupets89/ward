@@ -120,6 +120,10 @@ public final class FreePortController: NSObject {
         // state. A pid macOS refused at SIGTERM but accepted here *was*
         // signalled, and carrying the earlier refusal forward would report it
         // as never touched.
+        // The batch itself is carried to the final report. Re-deriving "what we
+        // signalled" from a later snapshot cannot tell a process that took a
+        // SIGKILL and lived from one that was never in the batch at all.
+        let forceKilledTargets = Set(survivors)
         let undeliveredForceKill = signal(.forceKill, to: survivors)
         guard await waited(Self.forceKillSettlingPeriod, onPort: port) else {
             present(FreePortMessages.unverifiablePort(port))
@@ -131,7 +135,7 @@ public final class FreePortController: NSObject {
         report(
             KillEscalation.nextStep(
                 stage: .afterForceKill(
-                    approvedTargets: approvedTargets,
+                    forceKilledTargets: forceKilledTargets,
                     undeliveredTargets: undeliveredForceKill
                 ),
                 snapshot: afterForceKill,

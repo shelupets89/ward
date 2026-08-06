@@ -15,13 +15,18 @@ public enum KillEscalation {
         case initial
         /// `approvedTargets` are the pids the user was shown and accepted.
         case afterTermination(approvedTargets: Set<Int32>)
-        /// `undeliveredTargets` are the pids whose SIGKILL never landed — macOS
-        /// refused it, or the call failed. Carried this far because a process
-        /// that was never signalled cannot be said to have survived a signal.
-        /// This is the SIGKILL round's result only: a pid refused at SIGTERM
-        /// whose SIGKILL then succeeded was signalled, and folding the earlier
-        /// refusal in would report it as untouched.
-        case afterForceKill(approvedTargets: Set<Int32>, undeliveredTargets: Set<Int32>)
+        /// `forceKilledTargets` are the pids SIGKILL was actually attempted on,
+        /// carried from the caller rather than re-derived here. Re-deriving it
+        /// from the current holders was the root of a bug that outlived three
+        /// rounds of fixes: a process that closed its socket during the grace
+        /// period and rebound afterwards was absent from the SIGKILL batch, yet
+        /// looked identical to one that took a SIGKILL and lived.
+        ///
+        /// `undeliveredTargets` are the subset whose SIGKILL never landed —
+        /// macOS refused it, or the call failed. The SIGKILL round's result
+        /// only: a pid refused at SIGTERM whose SIGKILL then succeeded *was*
+        /// signalled, and folding the earlier refusal in would deny that.
+        case afterForceKill(forceKilledTargets: Set<Int32>, undeliveredTargets: Set<Int32>)
     }
 
     public enum Step: Equatable, Sendable {
@@ -68,42 +73,93 @@ public enum KillEscalation {
         guard !snapshot.holders.isEmpty else {
             return .report(outcomeForFreePort(stage: stage, isOccupied: snapshot.isOccupied))
         }
-        let targets = signalableIdentifiers(among: snapshot.holders, stage: stage, currentUser: currentUser)
-        guard !targets.isEmpty else {
-            return .report(outcomeWithNothingToSignal(holders: snapshot.holders, currentUser: currentUser))
-        }
         switch stage {
         case .initial:
-            return .terminate(targets)
-        case .afterTermination:
-            return .forceKill(targets)
-        case .afterForceKill(_, let undeliveredTargets):
-            // Only the pids actually signalled can be said to have survived. A
-            // stranger that appeared during the settling window is reported by
-            // the branch above, under its own outcome.
-            let signalledTargets = Set(targets)
-            let survivors = snapshot.holders.filter { signalledTargets.contains($0.processIdentifier) }
+            // No approved set yet — the dialog naming the targets is what this
+            // step produces.
+            return signalStep(among: snapshot.holders, approvedTargets: nil, currentUser: currentUser) { targets in
+                .terminate(targets)
+            }
+        case .afterTermination(let approvedTargets):
+            return signalStep(
+                among: snapshot.holders,
+                approvedTargets: approvedTargets,
+                currentUser: currentUser
+            ) { targets in
+                .forceKill(targets)
+            }
+        case .afterForceKill(let forceKilledTargets, let undeliveredTargets):
+            // Classifies by what was *done*, so it never asks which pids are
+            // signalable now — a different question, and the wrong one here.
             return .report(
-                .stillHeld(
-                    signalled: survivors.filter { !undeliveredTargets.contains($0.processIdentifier) },
-                    undelivered: survivors.filter { undeliveredTargets.contains($0.processIdentifier) },
-                    // Whatever else is on the port: a stranger that arrived
-                    // during the settling window, or another user's process.
-                    // Never signalled, but still the answer to "is it free?".
-                    untouched: snapshot.holders.filter { !signalledTargets.contains($0.processIdentifier) }
+                finalOutcome(
+                    holders: snapshot.holders,
+                    forceKilledTargets: forceKilledTargets,
+                    undeliveredTargets: undeliveredTargets,
+                    currentUser: currentUser
                 )
             )
         }
     }
 
+    private static func signalStep(
+        among holders: [ListeningProcess],
+        approvedTargets: Set<Int32>?,
+        currentUser: String,
+        makeStep: ([Int32]) -> Step
+    ) -> Step {
+        let targets = signalableIdentifiers(
+            among: holders,
+            approvedTargets: approvedTargets,
+            currentUser: currentUser
+        )
+        guard !targets.isEmpty else {
+            return .report(outcomeWithNothingToSignal(holders: holders, currentUser: currentUser))
+        }
+        return makeStep(targets)
+    }
+
+    /// Splits every holder by what actually happened to it. A total partition
+    /// of `holders`, keyed on the real SIGKILL batch — not on who could be
+    /// signalled now, which would label a process that merely reappeared as one
+    /// that withstood a signal nobody sent it.
+    private static func finalOutcome(
+        holders: [ListeningProcess],
+        forceKilledTargets: Set<Int32>,
+        undeliveredTargets: Set<Int32>,
+        currentUser: String
+    ) -> Outcome {
+        let wasForceKilled = { (holder: ListeningProcess) in
+            forceKilledTargets.contains(holder.processIdentifier)
+        }
+        let wasUndelivered = { (holder: ListeningProcess) in
+            undeliveredTargets.contains(holder.processIdentifier)
+        }
+        let signalled = holders.filter { wasForceKilled($0) && !wasUndelivered($0) }
+        let undelivered = holders.filter { wasForceKilled($0) && wasUndelivered($0) }
+        // Nothing Ward signalled is left, so the port belongs entirely to
+        // whatever else is on it — which has its own, better-aimed wording.
+        guard !signalled.isEmpty || !undelivered.isEmpty else {
+            return outcomeWithNothingToSignal(holders: holders, currentUser: currentUser)
+        }
+        return .stillHeld(
+            signalled: signalled,
+            undelivered: undelivered,
+            untouched: holders.filter { !wasForceKilled($0) }
+        )
+    }
+
     /// Sorted and deduplicated: `lsof` reports a pid once per socket, and one
     /// signal per process is both sufficient and all the user agreed to.
+    ///
+    /// - Parameter approvedTargets: `nil` before anything has been signalled —
+    ///   there is nothing to bound yet, because the dialog naming the targets
+    ///   has not been shown.
     private static func signalableIdentifiers(
         among holders: [ListeningProcess],
-        stage: Stage,
+        approvedTargets: Set<Int32>?,
         currentUser: String
     ) -> [Int32] {
-        let approvedTargets = approvedTargets(for: stage)
         let signalable = holders.filter { holder in
             guard holder.user == currentUser else {
                 return false
@@ -111,17 +167,6 @@ public enum KillEscalation {
             return approvedTargets?.contains(holder.processIdentifier) ?? true
         }
         return Set(signalable.map(\.processIdentifier)).sorted()
-    }
-
-    /// `nil` before anything has been signalled — there is nothing to bound yet,
-    /// because the dialog that names the targets has not been shown.
-    private static func approvedTargets(for stage: Stage) -> Set<Int32>? {
-        switch stage {
-        case .initial:
-            return nil
-        case .afterTermination(let approvedTargets), .afterForceKill(let approvedTargets, _):
-            return approvedTargets
-        }
     }
 
     /// The port holds nothing this user can see. What that *means* depends on
