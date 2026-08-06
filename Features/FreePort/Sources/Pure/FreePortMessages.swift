@@ -45,6 +45,28 @@ public enum FreePortMessages {
                 title: "Nothing is using port \(port)",
                 body: "No process is listening on port \(port), so there was nothing to stop."
             )
+        case .freedThenTakenByAnotherUser:
+            return AlertText(
+                title: "Port \(port) is in use again",
+                body: """
+                Ward stopped what you approved. Port \(port) is already in use again, by a \
+                process you do not own — and without administrator rights Ward cannot see \
+                which one. Nothing you approved is still running.
+                """
+            )
+        case .notPermitted(let refusedHolders):
+            return AlertText(
+                title: "macOS would not let Ward stop \(refusedHolders.count == 1 ? "that" : "those")",
+                body: """
+                Ward asked macOS to stop:
+
+                \(list(refusedHolders))
+                and was refused, so \(refusedHolders.count == 1 ? "it was" : "they were") never \
+                signalled and \(refusedHolders.count == 1 ? "is" : "are") still running. This \
+                normally means the process is protected by the system. Stopping it from a \
+                terminal will not work either; restarting is usually the only way.
+                """
+            )
         case .heldByAnotherUser(let visibleHolders):
             return anotherUsersPort(port, visibleHolders: visibleHolders)
         case .stillHeld(let holders):

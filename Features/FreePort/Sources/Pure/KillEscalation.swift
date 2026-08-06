@@ -15,7 +15,11 @@ public enum KillEscalation {
         case initial
         /// `approvedTargets` are the pids the user was shown and accepted.
         case afterTermination(approvedTargets: Set<Int32>)
-        case afterForceKill(approvedTargets: Set<Int32>)
+        /// `refusedTargets` are the pids the kernel returned `EPERM` for. They
+        /// are carried this far because a refused signal was never delivered,
+        /// and a process that was never signalled cannot be said to have
+        /// survived one.
+        case afterForceKill(approvedTargets: Set<Int32>, refusedTargets: Set<Int32>)
     }
 
     public enum Step: Equatable, Sendable {
@@ -30,8 +34,18 @@ public enum KillEscalation {
         /// which without root is the usual case for a port owned by root.
         case heldByAnotherUser(visibleHolders: [ListeningProcess])
         case freed
+        /// What the user approved is gone, but the port is occupied again by a
+        /// holder `lsof` cannot see. Distinct from `heldByAnotherUser`, which
+        /// says Ward never had anything to stop here — telling the user that
+        /// after a successful kill makes a working action look like a failure.
+        case freedThenTakenByAnotherUser
         /// Processes that were signalled and are still there.
         case stillHeld([ListeningProcess])
+        /// The kernel refused to signal these — `EPERM` despite the ownership
+        /// check passing, which macOS can return for a protected process. They
+        /// were never signalled, so they are reported separately from the ones
+        /// that were and survived.
+        case notPermitted([ListeningProcess])
         /// The approved processes are gone, but something that was never
         /// signalled is on the port now — typically a supervisor restarting the
         /// server inside the grace period. Kept apart from `stillHeld` because
@@ -53,12 +67,20 @@ public enum KillEscalation {
             return .terminate(targets)
         case .afterTermination:
             return .forceKill(targets)
-        case .afterForceKill:
+        case .afterForceKill(_, let refusedTargets):
             // Only the pids actually signalled can be said to have survived. A
             // stranger that appeared during the settling window is reported by
             // the branch above, under its own outcome.
             let signalledTargets = Set(targets)
-            return .report(.stillHeld(snapshot.holders.filter { signalledTargets.contains($0.processIdentifier) }))
+            let survivors = snapshot.holders.filter { signalledTargets.contains($0.processIdentifier) }
+            let refused = survivors.filter { refusedTargets.contains($0.processIdentifier) }
+            // A refusal is the more actionable news and the more likely one: a
+            // process that outlives a *delivered* SIGKILL is wedged in the
+            // kernel, whereas one macOS refused to signal is merely protected.
+            guard refused.isEmpty else {
+                return .report(.notPermitted(refused))
+            }
+            return .report(.stillHeld(survivors))
         }
     }
 
@@ -85,20 +107,21 @@ public enum KillEscalation {
         switch stage {
         case .initial:
             return nil
-        case .afterTermination(let approvedTargets), .afterForceKill(let approvedTargets):
+        case .afterTermination(let approvedTargets), .afterForceKill(let approvedTargets, _):
             return approvedTargets
         }
     }
 
+    /// The port holds nothing this user can see. What that *means* depends on
+    /// whether Ward has already acted: before any signal it is someone else's
+    /// port, afterwards it is a port Ward successfully freed and something else
+    /// took. Reporting the first in place of the second hides a successful kill.
     private static func outcomeForFreePort(stage: Stage, isOccupied: Bool) -> Outcome {
-        guard !isOccupied else {
-            return .heldByAnotherUser(visibleHolders: [])
-        }
         switch stage {
         case .initial:
-            return .nothingWasListening
+            return isOccupied ? .heldByAnotherUser(visibleHolders: []) : .nothingWasListening
         case .afterTermination, .afterForceKill:
-            return .freed
+            return isOccupied ? .freedThenTakenByAnotherUser : .freed
         }
     }
 

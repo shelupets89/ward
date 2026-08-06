@@ -39,7 +39,8 @@ enum PortInspector {
         let outcome = BoundedProcess.run(
             executablePath: lsofPath,
             arguments: lsofListenerArguments + [networkFilter],
-            capturesOutput: true
+            capturesOutput: true,
+            logger: WardLogger.freePort
         )
         guard outcome.didRun else {
             WardLogger.freePort.error("lsof did not run for \(networkFilter, privacy: .public).")
@@ -52,7 +53,8 @@ enum PortInspector {
         let outcome = BoundedProcess.run(
             executablePath: netstatPath,
             arguments: ["-an", "-p", "tcp"],
-            capturesOutput: true
+            capturesOutput: true,
+            logger: WardLogger.freePort
         )
         // netstat always has something to say, so silence means it never ran.
         guard outcome.didRun, outcome.didSucceed, !outcome.standardOutput.isEmpty else {

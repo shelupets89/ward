@@ -99,6 +99,32 @@ struct FreePortMessagesTests {
         #expect(text.body.contains("did not signal"))
     }
 
+    @Test("Says the kill worked when an invisible process takes the freed port")
+    func creditsTheKillWhenThePortIsRetaken() {
+        let text = FreePortMessages.outcome(.freedThenTakenByAnotherUser, port: 3001)
+        #expect(text.body.contains("Ward stopped what you approved"))
+        #expect(text.body.contains("Nothing you approved is still running"))
+    }
+
+    @Test("Says a refused signal was never sent, rather than that it was survived")
+    func reportsARefusalAsARefusal() {
+        let text = FreePortMessages.outcome(.notPermitted([server]), port: 3001)
+        #expect(text.body.contains("node (pid 26036)"))
+        #expect(text.body.contains("refused"))
+        #expect(text.body.contains("never signalled"))
+        #expect(!text.body.contains("survived"))
+    }
+
+    @Test("Agrees in number when several processes are refused")
+    func refusalTextAgreesInNumber() {
+        let single = FreePortMessages.outcome(.notPermitted([server]), port: 3001)
+        let several = FreePortMessages.outcome(.notPermitted([server, worker]), port: 3001)
+        #expect(single.title.contains("stop that"))
+        #expect(single.body.contains("it was never signalled"))
+        #expect(several.title.contains("stop those"))
+        #expect(several.body.contains("they were never signalled"))
+    }
+
     @Test("Agrees in number when several processes survive or several take the port")
     func outcomeTextAgreesInNumber() {
         let survivors = FreePortMessages.outcome(.stillHeld([server, worker]), port: 3001)
