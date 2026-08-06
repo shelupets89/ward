@@ -91,7 +91,7 @@ When a colleague tells me about a tool they built, I want to install it with one
 
 ### MVP Scope
 
-`ward --version` + one real command, installable via `brew install` from the tap with zero security dialogs. That alone tests the hypothesis; the remaining commands are additive.
+`brew install shelupets89/ward/ward` producing a running menu-bar app with zero security dialogs. **No CLI needed to test the hypothesis** — the install path is the whole point; every CLI command is additive.
 
 ### User Flow
 
@@ -132,48 +132,48 @@ brew upgrade ward             # self-update
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 0 | Formula spike | Prove `brew audit` accepts a source formula shipping a `.app`; test TCC survival across upgrade | pending | - | - | - |
-| 1 | CLI skeleton | `ward` executable target, arg parsing, `--version`, `--help` | in-progress | with 0 | - | [ward-cli-skeleton](../plans/ward-cli-skeleton.plan.md) |
-| 2 | `ward until <cmd>` | Wrap a command, hold an assertion for its lifetime | pending | - | 1 | - |
-| 3 | Further commands | `free-port`, `sleep-why` | pending | with 4 | 2 | - |
-| 4 | Tap + formula | `homebrew-ward` repo, source-building formula | pending | with 3 | 0, 1 | - |
-| 5 | Release automation + docs | Formula bump on tag; README install section | pending | - | 3, 4 | - |
+| 0 | Formula spike | Prove `brew audit` accepts a source formula installing a `.app`; measure the TCC re-grant cost; settle where the app lands | pending | - | - | - |
+| 1 | **Tap + formula** | `homebrew-ward` repo, source-building formula, README install section. **`brew install` gives you the app** | pending | - | 0 | - |
+| 2 | Release automation | Formula version bump on release tag, so the install path doesn't rot | pending | - | 1 | - |
+| 3 | CLI skeleton | `ward` executable target, arg parsing, `--version`, `--help` | pending | with 1, 2 | - | [ward-cli-skeleton](../plans/ward-cli-skeleton.plan.md) |
+| 4 | `ward until <cmd>` | Wrap a command, hold an assertion for its lifetime | pending | - | 3 | - |
+| 5 | `free-port`, `sleep-why` | Remaining terminal-shaped commands | pending | - | 3 | - |
 
 ### Phase Details
 
 **Phase 0: Formula spike**
 - **Goal**: Kill the approach early if Homebrew won't accept it.
-- **Scope**: A throwaway local formula; run `brew audit`; install, upgrade, measure the Accessibility re-grant cost, and settle where the `.app` should land (Cellar vs `/Applications` symlink — open question 2).
-- **Success signal**: A clear yes/no on both open questions. A "no" redirects Phase 4 to CLI-only.
+- **Scope**: A throwaway local formula; run `brew audit`; install, upgrade, measure the Accessibility re-grant cost, and settle where the `.app` should land (Cellar vs `/Applications` symlink).
+- **Success signal**: A clear yes/no on whether a formula may install an app-only payload. **A "no" makes Phase 3 a prerequisite for Phase 1** — a formula shipping a `ward` binary is conventional, one shipping only a `.app` is not.
 
-**Phase 1: CLI skeleton**
+**Phase 1: Tap + formula — the actual goal**
+- **Goal**: Replace `git clone … && cd ward && bash scripts/make-app.sh && open dist/Ward.app` with one command.
+- **Scope**: `homebrew-ward` repo, source-building formula, install tested on a clean user account, README install section rewritten to lead with `brew`.
+- **Success signal**: `brew install shelupets89/ward/ward` on a machine that has never seen Ward produces a running menu-bar app with **zero security dialogs**.
+
+**Phase 2: Release automation**
+- **Goal**: Stop the formula silently drifting behind releases.
+- **Scope**: Version bump driven from the existing release workflow.
+- **Success signal**: Tagging a release updates the formula with no manual step.
+
+**Phase 3: CLI skeleton**
 - **Goal**: Prove an executable target composes with the feature libraries.
-- **Scope**: Target, argument parsing, `--help`, and `--version` from a shared `WardVersion` constant — a CLI binary has no `Bundle.main` plist to read, so a test keeps the constant honest against `Info.plist`.
-- **Success signal**: `swift run ward --version` prints the version; `Pure/` coverage gate still passes.
+- **Scope**: Target, argument parsing, `--help`, and `--version` from a shared `WardVersion` constant — a CLI binary has no `Bundle.main` plist to read, so a test keeps the constant honest against `Info.plist`. **Starts by renaming the app target to `WardApp`** — a `ward` product collides with `Ward` on case-insensitive APFS.
+- **Success signal**: `swift run ward --version` prints the version; the app bundle still builds and launches.
 
-**Phase 2: `ward until <cmd>`**
+**Phase 4: `ward until <cmd>`**
 - **Goal**: Deliver the command that justifies the CLI existing.
-- **Scope**: Spawn the wrapped command, hold `PreventUserIdleSystemSleep`, release on exit, propagate exit code.
+- **Scope**: Spawn the wrapped command, hold `PreventUserIdleSystemSleep`, release on exit, propagate the exit code.
 - **Success signal**: `ward until sleep 30` keeps the Mac awake for exactly that long and exits 0.
 
-**Phase 3: Further commands**
+**Phase 5: `free-port`, `sleep-why`**
 - **Goal**: Cover the other terminal-shaped problems.
-- **Scope**: `free-port` (depends on the FreePort feature landing), `sleep-why`.
+- **Scope**: Reuse the shipped Free a Port logic; add sleep-assertion reporting.
 - **Success signal**: Each command works standalone with the app not running.
-
-**Phase 4: Tap + formula**
-- **Goal**: One-command install with no Gatekeeper dialog.
-- **Scope**: `homebrew-ward` repo, formula, install/upgrade tested on a clean user account.
-- **Success signal**: Zero security prompts, measured on a fresh account.
-
-**Phase 5: Release automation + docs**
-- **Goal**: Stop the formula rotting; make the path discoverable.
-- **Scope**: Version bump from the release workflow; README install section leads with `brew`.
-- **Success signal**: Tagging a release updates the formula with no manual step.
 
 ### Parallelism Notes
 
-Phase 0 and 1 are independent — the spike is Homebrew-side, the skeleton is Swift-side. Run both first; the spike can invalidate Phase 4 before any effort is spent there. Phases 3 and 4 are independent once 1 and 2 exist.
+Phase 3 (CLI) is independent of Phases 0–2 and can run alongside them — it's Swift-side, they're Homebrew-side. **The one coupling runs the other way**: if Phase 0 finds that Homebrew won't accept a formula installing only a `.app`, then Phase 3 must land *before* Phase 1, because a formula that ships a `ward` binary is conventional and one that ships only an app is not.
 
 ---
 
