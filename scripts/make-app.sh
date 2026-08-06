@@ -31,6 +31,14 @@ cp Support/Info.plist "${APP_BUNDLE}/Contents/Info.plist"
 cp "Support/${APP_NAME}.icns" "${APP_BUNDLE}/Contents/Resources/${APP_NAME}.icns"
 cp "${BIN_PATH}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
+# MIT asks that the notice travel with every copy, and this bundle is the only
+# thing that reaches a user — the DMG stages it and the Homebrew formula
+# installs it, so one copy here covers all three channels. It has to happen
+# before signing: a file added to a sealed bundle afterwards is one that
+# `codesign --verify --strict` rejects, and the formula's own test runs exactly
+# that check.
+cp LICENSE "${APP_BUNDLE}/Contents/Resources/LICENSE"
+
 # `security` reaches for the login keychain, which isn't there over SSH or on a
 # CI runner. Under `pipefail` its failure would abort the script before the
 # ad-hoc fallback below — the opposite of what this block is for — so its exit
