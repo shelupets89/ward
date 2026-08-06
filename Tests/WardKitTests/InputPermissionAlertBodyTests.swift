@@ -116,28 +116,44 @@ struct InputPermissionAlertBodyTests {
         #expect(accessibilityText.contains("Ward is running from:"))
         #expect(accessibilityText.contains("\n\(unbundledBuildPath)\n"))
         #expect(accessibilityText.contains("not an app bundle"))
-        #expect(accessibilityText.contains("Build and launch dist/Ward.app instead."))
+        #expect(accessibilityText.contains("build and launch dist/Ward.app so the grant belongs to Ward itself."))
         #expect(refusedTapText.contains("Ward is running from:"))
         #expect(refusedTapText.contains("\n\(unbundledBuildPath)\n"))
         #expect(refusedTapText.contains("not an app bundle"))
-        #expect(refusedTapText.contains("Build and launch dist/Ward.app instead."))
+        #expect(refusedTapText.contains("build and launch dist/Ward.app so the grant belongs to Ward itself."))
     }
 
-    /// Sending an unbundled build to a Settings pane is a detour the next
-    /// paragraph has to talk the reader back out of — and that reader is the
-    /// only one this branch was written for.
-    @Test("Withholds the pane instruction a build that cannot be listed cannot act on")
-    func withholdsPaneInstructionForUnbundledBuild() {
+    /// The pane is where an unbundled build gets fixed too — the grant belongs
+    /// to whatever launched it, and that app is listed there. Withholding the
+    /// instruction here would cost the reader the fast fix and leave only the
+    /// rebuild.
+    @Test("Keeps the pane instruction for an unbundled build, where the fix also lives")
+    func keepsPaneInstructionForUnbundledBuild() {
         #expect(
-            !InputPermissionAlertBody
+            InputPermissionAlertBody
                 .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
                 .contains("Open System Settings → Privacy & Security → Accessibility")
         )
         #expect(
-            !InputPermissionAlertBody
+            InputPermissionAlertBody
                 .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
                 .contains("Enable Ward under Privacy & Security → Input Monitoring")
         )
+    }
+
+    /// Naming the grant's real holder is the whole value of this branch, and
+    /// "nothing you add can match it" was false — it is Ward that cannot be
+    /// added, not the launching app, which is already in the list.
+    @Test("Names both fixes for an unbundled build rather than only the rebuild")
+    func namesBothFixesForUnbundledBuild() {
+        let accessibilityText = InputPermissionAlertBody
+            .describeMissingAccessibility(runningBundlePath: unbundledBuildPath)
+        let refusedTapText = InputPermissionAlertBody
+            .describeRefusedInputTap(runningBundlePath: unbundledBuildPath)
+        #expect(accessibilityText.contains("the grant belongs to whatever launched it"))
+        #expect(accessibilityText.contains("Enable that app in the list instead"))
+        #expect(refusedTapText.contains("the grant belongs to whatever launched it"))
+        #expect(refusedTapText.contains("Enable that app in the list instead"))
     }
 
     /// There is nothing to add, so telling the user to add it back would

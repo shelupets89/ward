@@ -8,8 +8,8 @@
 public enum InputPermissionAlertBody {
     public static func describeMissingAccessibility(runningBundlePath: String) -> String {
         return """
-        Blocking the keyboard and trackpad requires Accessibility \
-        access.\(openTheAccessibilityPane(runningBundlePath))
+        Blocking the keyboard and trackpad requires Accessibility access. Open System Settings → \
+        Privacy & Security → Accessibility, then click Start Cleaning Mode again.
 
         \(discloseRunningBuild(runningBundlePath))macOS grants access to one exact build. A Ward \
         already listed there — another install, or this one before a rebuild — is a different app \
@@ -20,39 +20,13 @@ public enum InputPermissionAlertBody {
 
     public static func describeRefusedInputTap(runningBundlePath: String) -> String {
         return """
-        macOS refused the input-blocking \
-        tap.\(enableUnderInputMonitoring(runningBundlePath))
+        macOS refused the input-blocking tap. Enable Ward under Privacy & Security → Input \
+        Monitoring (and confirm it is still enabled under Accessibility), then try again. If you \
+        just granted access, quit and relaunch Ward first.
 
         \(discloseRunningBuild(runningBundlePath))macOS grants access to one exact build, so a Ward \
         already listed under either pane may be a different app whose grant does not apply \
         here.\(remediateStaleEntry(runningBundlePath))
-        """
-    }
-
-    /// Withheld for a build that cannot appear in the pane at all. Sending it to
-    /// System Settings is a detour `describeBuildLocation` then has to talk the
-    /// reader back out of, and that reader is the only one that branch exists for.
-    private static func openTheAccessibilityPane(_ bundlePath: String) -> String {
-        guard isWorthOpeningSettings(bundlePath) else {
-            return ""
-        }
-        return " " + """
-        Open System Settings → Privacy & Security → Accessibility, then click Start Cleaning \
-        Mode again.
-        """
-    }
-
-    /// Withheld for the same reason, and it carries a second action besides the
-    /// pane: the tap is refused just as readily when Input Monitoring is on and
-    /// Accessibility has since been switched off.
-    private static func enableUnderInputMonitoring(_ bundlePath: String) -> String {
-        guard isWorthOpeningSettings(bundlePath) else {
-            return ""
-        }
-        return " " + """
-        Enable Ward under Privacy & Security → Input Monitoring (and confirm it is still enabled \
-        under Accessibility), then try again. If you just granted access, quit and relaunch Ward \
-        first.
         """
     }
 
@@ -78,37 +52,38 @@ public enum InputPermissionAlertBody {
     ///
     /// Split from the wrapping above so each has one reason to change: this one
     /// owns what the paragraph says, that one owns whether it appears at all.
+    ///
+    /// An unbundled build is still fixable from the same pane, which is why the
+    /// instruction above is not withheld from it: macOS attributes the grant to
+    /// the responsible process, so the app that launched this one is already in
+    /// that list. Saying "nothing you add can match it" would be false — it is
+    /// Ward that cannot be added, not the launcher. Both fixes are named because
+    /// enabling the launcher fixes the session now, while the rebuild is what
+    /// makes the grant belong to Ward.
     private static func describeBuildLocation(_ bundlePath: String) -> String {
         guard isAppBundle(bundlePath) else {
             return """
             Ward is running from:
             \(bundlePath)
 
-            That is not an app bundle, so nothing you add in System Settings can match it — a \
-            build started this way is granted through whatever launched it, usually your \
-            terminal. Build and launch dist/Ward.app instead.
+            That is not an app bundle, so the grant belongs to whatever launched it — your \
+            terminal, or Xcode — and not to Ward. Enable that app in the list instead, or build \
+            and launch dist/Ward.app so the grant belongs to Ward itself.
             """
         }
         return "This copy of Ward is:\n\(bundlePath)"
     }
 
     /// The one sentence both alerts share word for word, and only when there is
-    /// something to add. A build that is not a bundle cannot be added to either
-    /// pane, so offering it would contradict the paragraph that has just said
-    /// nothing can match. Shared rather than written out twice: it drifted once
-    /// already, reaching only the Accessibility alert.
+    /// something to add. Ward itself can be added to a pane only when it is a
+    /// bundle, so offering this to a build that is not one would point at
+    /// something the reader cannot do. Shared rather than written out twice: it
+    /// drifted once already, reaching only the Accessibility alert.
     private static func remediateStaleEntry(_ bundlePath: String) -> String {
         guard isAppBundle(bundlePath) else {
             return ""
         }
         return " Remove that entry with “−” and add this copy of Ward instead."
-    }
-
-    /// Three states, not two. A path that is visibly not a bundle must not be
-    /// sent to a pane it can never appear in; a blank path says nothing either
-    /// way, so the instruction is still the best advice available and stands.
-    private static func isWorthOpeningSettings(_ bundlePath: String) -> Bool {
-        return bundlePath.allSatisfy(\.isWhitespace) || isAppBundle(bundlePath)
     }
 
     /// `Bundle.main.bundleURL.path` resolves from the layout on disk rather than
