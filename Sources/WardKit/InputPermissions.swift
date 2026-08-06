@@ -16,7 +16,7 @@ public enum InputPermissions {
         promptSystemAccessibilityDialog()
         presentSettingsAlert(
             messageText: "Ward needs Accessibility access",
-            informativeText: InputPermissionAlertText.describeMissingAccessibility(
+            informativeText: InputPermissionAlertBody.describeMissingAccessibility(
                 runningBundlePath: runningBundlePath
             ),
             settingsButtonTitle: "Open Accessibility Settings",
@@ -31,7 +31,7 @@ public enum InputPermissions {
         CGRequestListenEventAccess()
         presentSettingsAlert(
             messageText: "Ward can’t lock input yet",
-            informativeText: InputPermissionAlertText.describeRefusedInputTap(
+            informativeText: InputPermissionAlertBody.describeRefusedInputTap(
                 runningBundlePath: runningBundlePath
             ),
             settingsButtonTitle: "Open Input Monitoring Settings",
@@ -39,8 +39,6 @@ public enum InputPermissions {
         )
     }
 
-    /// Which Ward is asking. `Bundle.main` is the running bundle, so this stays
-    /// correct when a rebuild swaps the app under a session that is still open.
     private static var runningBundlePath: String {
         return Bundle.main.bundleURL.path
     }
