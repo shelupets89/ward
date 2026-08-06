@@ -24,9 +24,7 @@ extension FreePortController: WardFeature {
     }
 
     private func makeItem(title: String, action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        return item
+        return FeatureMenuItems.make(title: title, action: action, target: self)
     }
 }
 

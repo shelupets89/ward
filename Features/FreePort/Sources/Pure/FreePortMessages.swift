@@ -45,18 +45,19 @@ public enum FreePortMessages {
                 title: "Nothing is using port \(port)",
                 body: "No process is listening on port \(port), so there was nothing to stop."
             )
-        case .heldByAnotherUser(let visibleHolders):
-            return anotherUsersPort(port, visibleHolders: visibleHolders)
-        case .stillHeld(let holders):
+        case .freedThenTakenByAnotherUser:
             return AlertText(
-                title: "Port \(port) is still in use",
+                title: "Port \(port) is in use again",
                 body: """
-                Port \(port) is still held by:
-
-                \(list(holders))
-                \(holders.count == 1 ? "It" : "They") survived both SIGTERM and SIGKILL.
+                Ward stopped what you approved. Port \(port) is already in use again, by a \
+                process you do not own — and without administrator rights Ward cannot see \
+                which one. Nothing you approved is still running.
                 """
             )
+        case .stillHeld(let signalled, let undelivered, let untouched):
+            return stillHeldPort(port, signalled: signalled, undelivered: undelivered, untouched: untouched)
+        case .heldByAnotherUser(let visibleHolders):
+            return anotherUsersPort(port, visibleHolders: visibleHolders)
         case .takenByAnotherProcess(let holders):
             return AlertText(
                 title: "Port \(port) is in use again",
@@ -70,6 +71,54 @@ public enum FreePortMessages {
                 """
             )
         }
+    }
+
+    /// Every non-empty list is rendered. Leaving one out would leave a process
+    /// holding the port unnamed, which is the same failure as reporting a count
+    /// instead of names — just after the kill instead of before it.
+    private static func stillHeldPort(
+        _ port: UInt16,
+        signalled: [ListeningProcess],
+        undelivered: [ListeningProcess],
+        untouched: [ListeningProcess]
+    ) -> AlertText {
+        let survivedParagraph = paragraph(
+            "\(signalled.count == 1 ? "This survived" : "These survived") both SIGTERM and SIGKILL:",
+            listing: signalled
+        )
+        // Deliberately hedged. This list holds everything the signal did not
+        // reach, and Ward only knows the reason for some of them — asserting
+        // "protected by the system" for all would be a guess dressed as a fact.
+        let undeliveredParagraph = paragraph(
+            """
+            Ward could not deliver a signal to \(undelivered.count == 1 ? "this one" : "these"), so \
+            \(undelivered.count == 1 ? "it was" : "they were") never sent anything. That can mean \
+            the process is protected by the system, in which case stopping it from a terminal \
+            will not work either:
+            """,
+            listing: undelivered
+        )
+        let untouchedParagraph = paragraph(
+            "Also on the port. Ward never signalled \(untouched.count == 1 ? "it" : "them"):",
+            listing: untouched
+        )
+        return AlertText(
+            title: "Port \(port) is still in use",
+            body: "Port \(port) is still held.\(survivedParagraph)\(undeliveredParagraph)\(untouchedParagraph)"
+        )
+    }
+
+    private static func paragraph(_ heading: String, listing processes: [ListeningProcess]) -> String {
+        guard !processes.isEmpty else {
+            return ""
+        }
+        return """
+
+
+        \(heading)
+
+        \(list(processes))
+        """
     }
 
     /// Branches on emptiness inside one case rather than across two `where`

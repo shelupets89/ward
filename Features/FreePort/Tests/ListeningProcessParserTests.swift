@@ -1,22 +1,24 @@
 import Testing
 @testable import FreePort
 
-/// Fixtures are real `lsof -iTCP -sTCP:LISTEN -P -n` output from a development
-/// Mac, including the ControlCenter rows that make the confirmation dialog
-/// necessary and the IPv4/IPv6 pairs that make deduplication necessary.
+/// Fixtures are real `lsof -l -n -P -sTCP:LISTEN` output from a development Mac —
+/// the exact invocation `PortInspector` uses, so the USER column is the numeric
+/// UID the ownership check actually compares. Includes the ControlCenter rows
+/// that make the confirmation dialog necessary and the IPv4/IPv6 pairs that make
+/// deduplication necessary.
 struct ListeningProcessParserTests {
     private let realLsofOutput = """
     COMMAND     PID          USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
-    rapportd   1276 dimashelupets   10u  IPv4 0x2906e852ceb595b5      0t0  TCP *:55401 (LISTEN)
-    rapportd   1276 dimashelupets   13u  IPv6 0xd380d511572cba91      0t0  TCP *:55401 (LISTEN)
-    ControlCe  1327 dimashelupets    9u  IPv4 0xe0d71c179aacbada      0t0  TCP *:7000 (LISTEN)
-    ControlCe  1327 dimashelupets   10u  IPv6  0x1c424d85b860ea0      0t0  TCP *:7000 (LISTEN)
-    ControlCe  1327 dimashelupets   11u  IPv4 0xea19763bdb85cf1e      0t0  TCP *:5000 (LISTEN)
-    ControlCe  1327 dimashelupets   12u  IPv6 0xeb0bfde50ce47fd3      0t0  TCP *:5000 (LISTEN)
-    node      26036 dimashelupets   67u  IPv6 0x2c01dd8f5febcf86      0t0  TCP *:3001 (LISTEN)
-    node      28281 dimashelupets   21u  IPv6 0xd33d97ee2af0f1f9      0t0  TCP [::1]:9229 (LISTEN)
-    node      28281 dimashelupets   22u  IPv4 0xe46d72069213828b      0t0  TCP 127.0.0.1:9229 (LISTEN)
-    Code\\x20H 84580 dimashelupets  192u  IPv6 0x6e029dbf215ca503      0t0  TCP *:9735 (LISTEN)
+    rapportd   1276 501   10u  IPv4 0x2906e852ceb595b5      0t0  TCP *:55401 (LISTEN)
+    rapportd   1276 501   13u  IPv6 0xd380d511572cba91      0t0  TCP *:55401 (LISTEN)
+    ControlCe  1327 501    9u  IPv4 0xe0d71c179aacbada      0t0  TCP *:7000 (LISTEN)
+    ControlCe  1327 501   10u  IPv6  0x1c424d85b860ea0      0t0  TCP *:7000 (LISTEN)
+    ControlCe  1327 501   11u  IPv4 0xea19763bdb85cf1e      0t0  TCP *:5000 (LISTEN)
+    ControlCe  1327 501   12u  IPv6 0xeb0bfde50ce47fd3      0t0  TCP *:5000 (LISTEN)
+    node      26036 501   67u  IPv6 0x2c01dd8f5febcf86      0t0  TCP *:3001 (LISTEN)
+    node      28281 501   21u  IPv6 0xd33d97ee2af0f1f9      0t0  TCP [::1]:9229 (LISTEN)
+    node      28281 501   22u  IPv4 0xe46d72069213828b      0t0  TCP 127.0.0.1:9229 (LISTEN)
+    Code\\x20H 84580 501  192u  IPv6 0x6e029dbf215ca503      0t0  TCP *:9735 (LISTEN)
     """
 
     private func parsedRealOutput() -> [ListeningProcess] {
@@ -32,7 +34,7 @@ struct ListeningProcessParserTests {
     func readsWildcardRow() {
         let onPort3001 = parsedRealOutput().filter { $0.port == 3001 }
         #expect(onPort3001 == [
-            ListeningProcess(command: "node", processIdentifier: 26036, user: "dimashelupets", port: 3001)
+            ListeningProcess(command: "node", processIdentifier: 26036, user: "501", port: 3001)
         ])
     }
 
@@ -66,14 +68,14 @@ struct ListeningProcessParserTests {
     @Test("Leaves an escape it cannot decode exactly as lsof printed it")
     func leavesUndecodableEscapesAlone() {
         let unknownEscapeRow = """
-        Code\\xZZH 84580 dimashelupets  192u  IPv6 0x6e02      0t0  TCP *:9735 (LISTEN)
+        Code\\xZZH 84580 501  192u  IPv6 0x6e02      0t0  TCP *:9735 (LISTEN)
         """
         #expect(ListeningProcessParser.parse(unknownEscapeRow).first?.command == "Code\\xZZH")
     }
 
     @Test("Names a process by command and pid, never by a bare count")
     func describesProcessForConfirmation() {
-        let server = ListeningProcess(command: "node", processIdentifier: 26036, user: "dimashelupets", port: 3001)
+        let server = ListeningProcess(command: "node", processIdentifier: 26036, user: "501", port: 3001)
         #expect(server.displayName == "node (pid 26036)")
     }
 
@@ -85,10 +87,10 @@ struct ListeningProcessParserTests {
     @Test(
         "Skips malformed rows instead of throwing",
         arguments: [
-            "node      26036 dimashelupets   67u  IPv6",
-            "node      notapid dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3001 (LISTEN)",
-            "node      26036 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:notaport (LISTEN)",
-            "node      26036 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:70000 (LISTEN)",
+            "node      26036 501   67u  IPv6",
+            "node      notapid 501   67u  IPv6 0x2c0      0t0  TCP *:3001 (LISTEN)",
+            "node      26036 501   67u  IPv6 0x2c0      0t0  TCP *:notaport (LISTEN)",
+            "node      26036 501   67u  IPv6 0x2c0      0t0  TCP *:70000 (LISTEN)",
             "lsof: WARNING: can't stat() hfs file system /private/var/folders/zz",
             "      Output information may be incomplete."
         ]
@@ -102,7 +104,7 @@ struct ListeningProcessParserTests {
         let mixedOutput = """
         COMMAND     PID          USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
         lsof: WARNING: can't stat() hfs file system /private/var/folders/zz
-        node      26036 dimashelupets   67u  IPv6 0x2c01dd8f5febcf86      0t0  TCP *:3001 (LISTEN)
+        node      26036 501   67u  IPv6 0x2c01dd8f5febcf86      0t0  TCP *:3001 (LISTEN)
         """
         #expect(ListeningProcessParser.parse(mixedOutput).map(\.port) == [3001])
     }
@@ -110,21 +112,21 @@ struct ListeningProcessParserTests {
     @Test("Skips a row whose pid is not positive, which kill would read as a broadcast")
     func skipsNonPositiveProcessIdentifiers() {
         let broadcastRow = """
-        node          0 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3001 (LISTEN)
-        node         -1 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3002 (LISTEN)
+        node          0 501   67u  IPv6 0x2c0      0t0  TCP *:3001 (LISTEN)
+        node         -1 501   67u  IPv6 0x2c0      0t0  TCP *:3002 (LISTEN)
         """
         #expect(ListeningProcessParser.parse(broadcastRow).isEmpty)
     }
 
     @Test("Skips a row that is not in the LISTEN state")
     func skipsNonListeningRows() {
-        let establishedRow = "node      26036 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3001 (ESTABLISHED)"
+        let establishedRow = "node      26036 501   67u  IPv6 0x2c0      0t0  TCP *:3001 (ESTABLISHED)"
         #expect(ListeningProcessParser.parse(establishedRow).isEmpty)
     }
 
     @Test("Skips a row with no state column at all, not just one with the wrong state")
     func skipsRowMissingTheStateColumn() {
-        let rowWithoutState = "node      26036 dimashelupets   67u  IPv6 0x2c0      0t0  TCP *:3001"
+        let rowWithoutState = "node      26036 501   67u  IPv6 0x2c0      0t0  TCP *:3001"
         #expect(ListeningProcessParser.parse(rowWithoutState).isEmpty)
     }
 }

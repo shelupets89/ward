@@ -1,10 +1,14 @@
 import Foundation
+import os
 
 /// Runs a child process with a deadline.
 ///
-/// Every caller here runs on the main actor, so an unbounded `waitUntilExit()`
-/// would freeze the whole app — including the menu and the expiry timer — if
-/// `pmset` or `sudo` ever hung. Bounded beats infinite.
+/// An unbounded `waitUntilExit()` blocks whichever thread called it until the
+/// child decides to exit. On the main actor — where the keep-awake callers run —
+/// that freezes the whole app, menu and expiry timer included, if `pmset` or
+/// `sudo` ever hangs. FreePort deliberately calls from off the main actor, and
+/// still needs the deadline: a stuck `lsof` would otherwise pin a thread and
+/// leave the user's request unanswered forever. Bounded beats infinite either way.
 ///
 /// stdin is `/dev/null` on purpose: `sudo` must fail fast rather than block
 /// forever trying to read a password nobody can type.
@@ -21,10 +25,14 @@ public enum BoundedProcess {
         public let standardOutput: String
     }
 
+    /// - Parameter logger: the calling feature's category. Shared infrastructure
+    ///   logging under one feature's name files "lsof never launched" under
+    ///   `keep-awake`, where whoever is debugging FreePort will not look.
     public static func run(
         executablePath: String,
         arguments: [String],
-        capturesOutput: Bool = false
+        capturesOutput: Bool = false,
+        logger: Logger = WardLogger.keepAwake
     ) -> Outcome {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
@@ -41,11 +49,11 @@ public enum BoundedProcess {
         do {
             try process.run()
         } catch {
-            WardLogger.keepAwake.error("Could not launch \(executablePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("Could not launch \(executablePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return Outcome(didRun: false, didSucceed: false, standardOutput: "")
         }
         guard didFinish.wait(timeout: .now() + timeout) == .success else {
-            WardLogger.keepAwake.error("\(executablePath, privacy: .public) exceeded its deadline; terminating.")
+            logger.error("\(executablePath, privacy: .public) exceeded its deadline; terminating.")
             process.terminate()
             return Outcome(didRun: false, didSucceed: false, standardOutput: "")
         }

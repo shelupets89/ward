@@ -92,8 +92,11 @@ public final class FreePortController: NSObject {
     /// SIGTERM, wait, re-read, SIGKILL the survivors, wait, re-read. Each
     /// re-read is a fresh snapshot: nothing here trusts that a signal worked.
     private func escalate(onPort port: UInt16, approvedTargets: Set<Int32>) async {
-        signal(.terminate, to: approvedTargets.sorted())
+        // Discarded deliberately: only the SIGKILL round's result describes the
+        // final state, and anything refused here is re-signalled below anyway.
+        _ = signal(.terminate, to: approvedTargets.sorted())
         guard await waited(Self.terminationGracePeriod, onPort: port) else {
+            present(FreePortMessages.unverifiablePort(port))
             return
         }
         guard let afterTermination = await inspect(port, afterSignalling: true) else {
@@ -108,11 +111,22 @@ public final class FreePortController: NSObject {
             report(escalationStep, port: port)
             return
         }
+        // "Still present", not "survived": SIGTERM may have been refused rather
+        // than ignored, and the log should not assert a delivery either.
         WardLogger.freePort.notice(
-            "\(survivors.count, privacy: .public) process(es) survived SIGTERM on port \(port, privacy: .public)."
+            "\(survivors.count, privacy: .public) process(es) still on port \(port, privacy: .public) after SIGTERM."
         )
-        signal(.forceKill, to: survivors)
+        // The SIGKILL round's result is the only one that describes the final
+        // state. A pid macOS refused at SIGTERM but accepted here *was*
+        // signalled, and carrying the earlier refusal forward would report it
+        // as never touched.
+        // The batch itself is carried to the final report. Re-deriving "what we
+        // signalled" from a later snapshot cannot tell a process that took a
+        // SIGKILL and lived from one that was never in the batch at all.
+        let forceKilledTargets = Set(survivors)
+        let undeliveredForceKill = signal(.forceKill, to: survivors)
         guard await waited(Self.forceKillSettlingPeriod, onPort: port) else {
+            present(FreePortMessages.unverifiablePort(port))
             return
         }
         guard let afterForceKill = await inspect(port, afterSignalling: true) else {
@@ -120,7 +134,10 @@ public final class FreePortController: NSObject {
         }
         report(
             KillEscalation.nextStep(
-                stage: .afterForceKill(approvedTargets: approvedTargets),
+                stage: .afterForceKill(
+                    forceKilledTargets: forceKilledTargets,
+                    undeliveredTargets: undeliveredForceKill
+                ),
                 snapshot: afterForceKill,
                 currentUser: PortInspector.currentUser
             ),
@@ -128,13 +145,20 @@ public final class FreePortController: NSObject {
         )
     }
 
-    private func signal(_ signal: ProcessSignaller.Signal, to processIdentifiers: [Int32]) {
-        processIdentifiers.forEach { processIdentifier in
+    /// Returns the pids the signal never reached — refused by macOS, or failed
+    /// outright. Both belong in one set because the report turns on delivery,
+    /// not on the reason: an undelivered signal leaves the process running, and
+    /// calling that "survived SIGKILL" describes something that never happened
+    /// and sends the user looking for a fix that does not exist.
+    private func signal(_ signal: ProcessSignaller.Signal, to processIdentifiers: [Int32]) -> Set<Int32> {
+        let outcomes = processIdentifiers.map { processIdentifier in
             let outcome = ProcessSignaller.send(signal, to: processIdentifier)
             WardLogger.freePort.info(
                 "\(String(describing: signal), privacy: .public) to pid \(processIdentifier, privacy: .public): \(String(describing: outcome), privacy: .public)"
             )
+            return (processIdentifier, outcome)
         }
+        return Set(outcomes.filter { $0.1 == .notPermitted || $0.1 == .failed }.map(\.0))
     }
 
     /// False if the wait was cut short. A grace period that did not actually
@@ -231,10 +255,6 @@ public final class FreePortController: NSObject {
     }
 
     private func present(_ text: FreePortMessages.AlertText) {
-        let alert = NSAlert()
-        alert.messageText = text.title
-        alert.informativeText = text.body
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        WardAlert.presentFailure(messageText: text.title, informativeText: text.body)
     }
 }

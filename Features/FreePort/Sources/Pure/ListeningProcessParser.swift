@@ -1,6 +1,9 @@
 import Foundation
 
-/// Reads `lsof -iTCP -sTCP:LISTEN -P -n` output into processes.
+/// Reads `lsof -l -n -P -sTCP:LISTEN` output into processes.
+///
+/// `-l` matters to more than formatting: it makes the USER column a numeric
+/// UID, which is what the ownership check compares against. See `PortInspector`.
 ///
 /// Every rejection here is deliberate. A row this parser cannot read in full is
 /// dropped rather than partially believed: the output feeds a kill list, and a
@@ -27,12 +30,12 @@ public enum ListeningProcessParser {
         // state is the last column. Requiring it *present* rather than merely
         // not-contradictory is the point: a truncated row that stops before the
         // state must not inherit "listening" by omission and reach the kill list.
+        // This also rejects the header row, whose last column is NAME.
         guard fields.count > addressFieldIndex,
               let state = fields.last,
               state == listenStateMarker else {
             return nil
         }
-        // The header row fails here on "PID", which is why it needs no special case.
         // A non-positive pid is rejected outright: kill(2) reads 0 as "my whole
         // process group" and -1 as "every process I own".
         guard let processIdentifier = Int32(fields[processIdentifierFieldIndex]), processIdentifier > 0 else {
