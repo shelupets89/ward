@@ -8,13 +8,15 @@ A macOS menu-bar utility for things macOS makes hard. No Dock icon, no window, n
 brew install shelupets89/ward/ward
 ```
 
-This compiles Ward on your machine rather than downloading it. Nothing downloaded means nothing carries `com.apple.quarantine`, which is the only reason Gatekeeper would ever be consulted — so there's no security dialog at any point. That matters here: Ward isn't notarized, and the dialog it would otherwise produce has no Open button. Needs Xcode Command Line Tools (`xcode-select --install`), and takes about 30 seconds to build.
+This compiles Ward on your machine rather than downloading it. Nothing downloaded means nothing carries `com.apple.quarantine`, which is what makes macOS check an app with Gatekeeper when you open it — so there's no security dialog at any point. That matters here: Ward isn't notarized, and the dialog it would otherwise produce has no Open button. Needs Xcode Command Line Tools (`xcode-select --install`), and builds in well under a minute (about 10 seconds on Apple silicon).
 
 Homebrew's install sandbox isn't permitted to write to `/Applications`, so the last step is yours. `brew install` prints it when it finishes:
 
 ```bash
 ln -s "$(brew --prefix ward)/Ward.app" /Applications && open /Applications/Ward.app
 ```
+
+Use the full `shelupets89/ward/ward` name rather than tapping first and installing `ward` — Homebrew only auto-trusts a formula you name in full, and the short form is refused as coming from an untrusted tap.
 
 Update with `brew upgrade ward` — the symlink follows, so it's a one-time step. **The Accessibility grant does not survive an upgrade**: Ward is ad-hoc signed, every upgrade rebuilds it into a binary macOS considers a different app, and grants are tied to the binary. Cleaning Mode needs re-granting each time.
 
