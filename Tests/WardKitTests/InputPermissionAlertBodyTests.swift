@@ -17,6 +17,12 @@ private let awkwardPath = "/Users/you/My Projects/ward/dist/Ward.app"
 /// only one alert carried it — so the tests assert it from a single source.
 private let remediation = "Remove that entry with “−” and add this copy of Ward instead."
 
+/// Mirrors the openers each alert shares between its two bodies. A shared
+/// constant makes them undriftable only while both call sites still use it —
+/// a hand-typed near-copy at one of them would leave every other test green.
+private let accessibilityRequired = "Blocking the keyboard and trackpad requires Accessibility access."
+private let tapRefused = "macOS refused the input-blocking tap."
+
 struct InputPermissionAlertBodyTests {
     @Test(
         "Names the running build when Accessibility is missing",
@@ -162,8 +168,31 @@ struct InputPermissionAlertBodyTests {
             // Whether a grant to the launcher reaches an already-running child
             // is unverified here — checking it means writing real TCC state — so
             // the relaunch is offered as a fallback, not asserted as a step.
-            #expect(text.contains("if it stays refused"))
+            #expect(text.contains("quitting Ward first if that does not fix it"))
+            // This paragraph is shared by both alerts, so it cannot lean on a
+            // word only one of them establishes: nothing is "refused" in the
+            // Accessibility alert, which never says anything was.
+            #expect(!text.contains("refused") || text.contains(tapRefused))
         }
+    }
+
+    /// The shared openers are undriftable only while both bodies interpolate
+    /// them. Asserting the rendered text catches a call site that stops.
+    @Test(
+        "Opens both bodies of each alert with the same sentence",
+        arguments: [localBuildPath, unbundledBuildPath]
+    )
+    func opensBothBodiesWithTheSameSentence(bundlePath: String) {
+        #expect(
+            InputPermissionAlertBody
+                .describeMissingAccessibility(runningBundlePath: bundlePath)
+                .hasPrefix(accessibilityRequired)
+        )
+        #expect(
+            InputPermissionAlertBody
+                .describeRefusedInputTap(runningBundlePath: bundlePath)
+                .hasPrefix(tapRefused)
+        )
     }
 
     /// By the time the tap alert can fire, `ensureAccessibilityGranted` has

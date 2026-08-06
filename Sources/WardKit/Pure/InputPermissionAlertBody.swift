@@ -79,7 +79,7 @@ public enum InputPermissionAlertBody {
 
         That is not an app bundle, so the grant belongs to whatever launched it — usually your \
         terminal — and not to Ward. If you recognise it under Privacy & Security, enable it there \
-        and try again, quitting Ward first if it stays refused. Otherwise, build and launch \
+        and try again, quitting Ward first if that does not fix it. Otherwise, build and launch \
         dist/Ward.app and grant Ward itself.
         """
     }
