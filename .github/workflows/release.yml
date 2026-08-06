@@ -47,6 +47,17 @@ jobs:
             --notes-file - <<'NOTES'
           ## Install
 
+          ```bash
+          brew install shelupets89/ward/ward
+          ```
+
+          This compiles Ward on your machine. Nothing is downloaded, so nothing is
+          quarantined, and there is no Gatekeeper dialog to get past. Homebrew prints
+          a `ln -s` line at the end to put it in `/Applications` — its sandbox is not
+          allowed to do that for you.
+
+          ## Or the download below
+
           Ward is **not notarized** (that needs a paid Apple Developer ID), so macOS
           will refuse to open the download:
 
@@ -65,8 +76,8 @@ jobs:
           Either route is you telling macOS to trust a file it cannot verify. Only do
           that if you trust the source.
 
-          **Cleanest alternative — build it yourself.** Locally built apps are never
-          quarantined, so there is no warning at all:
+          **Or build it by hand**, if you would rather not use Homebrew. Same
+          reason it works — a locally built app is never quarantined:
 
           ```bash
           git clone https://github.com/${{ github.repository }} && cd ward
@@ -75,3 +86,58 @@ jobs:
 
           See `INSTRUCTIONS.txt` below, and the README for first-run permissions.
           NOTES
+
+  update-tap:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # GITHUB_TOKEN is scoped to this repository, and the tap is a second one.
+      # Failing here beats failing after the release is already public.
+      - name: Require a tap token
+        run: |
+          if [ -z "${{ secrets.TAP_PUSH_TOKEN }}" ]; then
+            echo "::error::TAP_PUSH_TOKEN is not set. Create a fine-grained PAT with Contents:write on shelupets89/homebrew-ward and add it as a repository secret."
+            exit 1
+          fi
+
+      - name: Render the formula for this tag
+        run: |
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          brew tap-new shelupets89/ward --no-git
+          bash scripts/render-formula.sh "${TAG}" \
+            "$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
+
+      # A formula is only as good as the install it produces, and the failure
+      # mode this guards against is silent: the tap keeps serving a formula that
+      # no longer builds. Testing before the push means a broken one never lands.
+      - name: Prove the formula installs
+        run: |
+          brew install --build-from-source shelupets89/ward/ward
+          brew test shelupets89/ward/ward
+
+      - name: Nothing downloaded means nothing quarantined
+        run: |
+          APP="$(brew --prefix ward)/Ward.app"
+          if xattr -r "${APP}" | grep -q com.apple.quarantine; then
+            echo "::error::${APP} carries com.apple.quarantine — the install path no longer avoids Gatekeeper."
+            exit 1
+          fi
+          echo "No quarantine attribute on ${APP}"
+
+      - name: Publish the formula to the tap
+        env:
+          GH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+          TAP_REPO: shelupets89/homebrew-ward
+        run: |
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          FORMULA="$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
+
+          CURRENT_SHA="$(gh api "repos/${TAP_REPO}/contents/Formula/ward.rb" --jq .sha 2>/dev/null || true)"
+          gh api --method PUT "repos/${TAP_REPO}/contents/Formula/ward.rb" \
+            -f message="🍺 chore(formula): ward ${TAG}" \
+            -f content="$(base64 -i "${FORMULA}" | tr -d '\n')" \
+            ${CURRENT_SHA:+-f sha="${CURRENT_SHA}"} \
+            --jq .commit.html_url

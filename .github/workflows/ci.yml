@@ -82,6 +82,36 @@ jobs:
             dist/*-INSTRUCTIONS.txt
           if-no-files-found: error
 
+  formula:
+    name: Homebrew formula
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tap's formula is rendered, never hand-edited, so what needs guarding
+      # is that the template still renders to something Homebrew accepts. It is
+      # rendered against the newest release because only a real tarball produces
+      # a real checksum — a placeholder would make the audit meaningless.
+      - name: Render the formula for the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
+          echo "Rendering against ${LATEST_TAG}"
+          brew tap-new shelupets89/ward --no-git
+          bash scripts/render-formula.sh "${LATEST_TAG}" \
+            "$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
+
+      - name: brew style
+        run: brew style shelupets89/ward
+
+      # `--online` reaches the GitHub API, which rate-limits unauthenticated
+      # runners hard enough to make this job flaky without a token.
+      - name: brew audit
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+        run: brew audit --strict --online shelupets89/ward/ward
+
   shellcheck:
     name: Shell scripts
     runs-on: ubuntu-latest
