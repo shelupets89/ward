@@ -59,6 +59,10 @@ class Ward < Formula
     app = prefix/"Ward.app"
     assert_path_exists app/"Contents/MacOS/Ward"
 
+    # Nothing else would notice the notice going missing: codesign seals
+    # whatever is in the bundle, so one built without it verifies perfectly.
+    assert_path_exists app/"Contents/Resources/LICENSE"
+
     # The bundle must stay signed: an unsigned binary is one macOS refuses to
     # keep an Accessibility grant for at all.
     system "codesign", "--verify", "--strict", app
