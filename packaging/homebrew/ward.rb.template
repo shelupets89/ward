@@ -3,6 +3,7 @@ class Ward < Formula
   homepage "https://github.com/shelupets89/ward"
   url "__URL__"
   sha256 "__SHA256__"
+  license "MIT"
 
   # Deliberately no `head` spec. Everything else here exists to pin one
   # checksummed tarball, and `--HEAD` would offer an unpinned path around that.
