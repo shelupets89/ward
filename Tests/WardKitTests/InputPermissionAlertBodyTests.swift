@@ -169,11 +169,27 @@ struct InputPermissionAlertBodyTests {
             // is unverified here — checking it means writing real TCC state — so
             // the relaunch is offered as a fallback, not asserted as a step.
             #expect(text.contains("quitting Ward first if that does not fix it"))
-            // This paragraph is shared by both alerts, so it cannot lean on a
-            // word only one of them establishes: nothing is "refused" in the
-            // Accessibility alert, which never says anything was.
-            #expect(!text.contains("refused") || text.contains(tapRefused))
         }
+        // The shared paragraph cannot lean on a word only one of its two callers
+        // establishes. Asserted here rather than in the loop above: the tap alert
+        // opens by saying something was refused, so it could never fail there.
+        #expect(!accessibilityText.contains("refused"))
+    }
+
+    /// This alert exists only because the grant is missing, so no body of it may
+    /// read as though the grant were already in place. That crept in when a
+    /// participial "…access, granted under Settings" was split into its own
+    /// sentence to share the opener, turning a location into a claim.
+    @Test(
+        "Never reads as though Accessibility were already granted",
+        arguments: [localBuildPath, unbundledBuildPath, ""]
+    )
+    func neverReadsAsAlreadyGranted(bundlePath: String) {
+        #expect(
+            !InputPermissionAlertBody
+                .describeMissingAccessibility(runningBundlePath: bundlePath)
+                .contains("is granted")
+        )
     }
 
     /// The shared openers are undriftable only while both bodies interpolate

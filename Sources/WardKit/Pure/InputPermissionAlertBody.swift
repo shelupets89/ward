@@ -25,7 +25,7 @@ public enum InputPermissionAlertBody {
             """
         }
         return """
-        \(accessibilityRequired) It is granted under System Settings → Privacy & Security → \
+        \(accessibilityRequired) Grant it under System Settings → Privacy & Security → \
         Accessibility.
 
         \(explainUnbundledGrant(runningBundlePath))
