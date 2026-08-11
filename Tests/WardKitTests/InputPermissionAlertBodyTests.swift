@@ -15,7 +15,7 @@ private let awkwardPath = "/Users/you/My Projects/ward/dist/Ward.app"
 
 /// The sentence both alerts share verbatim. It drifted apart once already —
 /// only one alert carried it — so the tests assert it from a single source.
-private let remediation = "Remove that entry with “−” and add this copy of Ward instead."
+private let remediation = "If you find one, remove it with “−” and add this copy of Ward instead."
 
 /// Mirrors the openers each alert shares between its two bodies. A shared
 /// constant makes them undriftable only while both call sites still use it —
@@ -176,10 +176,34 @@ struct InputPermissionAlertBodyTests {
         #expect(!accessibilityText.contains("refused"))
     }
 
+    /// Ward cannot read TCC.db, so it never knows whether a conflicting entry is
+    /// actually there. Both alerts must say "may be" and offer the fix
+    /// conditionally: on a first install there is nothing to remove, and `main`
+    /// hedged this before the rewrite dropped the "If".
+    @Test(
+        "Never asserts a conflicting entry it cannot know exists",
+        arguments: [homebrewInstallPath, localBuildPath, ""]
+    )
+    func neverAssertsAConflictingEntryExists(bundlePath: String) {
+        let accessibilityText = InputPermissionAlertBody
+            .describeMissingAccessibility(runningBundlePath: bundlePath)
+        let refusedTapText = InputPermissionAlertBody
+            .describeRefusedInputTap(runningBundlePath: bundlePath)
+        for text in [accessibilityText, refusedTapText] {
+            #expect(!text.contains("Remove that entry"))
+            #expect(!text.contains("is a different app"))
+        }
+        #expect(accessibilityText.contains("may be a different app"))
+        #expect(refusedTapText.contains("may be a different app"))
+    }
+
     /// This alert exists only because the grant is missing, so no body of it may
     /// read as though the grant were already in place. That crept in when a
     /// participial "…access, granted under Settings" was split into its own
     /// sentence to share the opener, turning a location into a claim.
+    ///
+    /// A tripwire for this one wording, not proof against the class: "has been
+    /// granted" would walk straight past it, as its sibling tripwire admits too.
     @Test(
         "Never reads as though Accessibility were already granted",
         arguments: [localBuildPath, unbundledBuildPath, ""]

@@ -19,7 +19,7 @@ public enum InputPermissionAlertBody {
             then click Start Cleaning Mode again.
 
             \(discloseRunningBuild(runningBundlePath))macOS grants access to one exact build. A \
-            Ward already listed there — another install, or this one before a rebuild — is a \
+            Ward already listed there — another install, or this one before a rebuild — may be a \
             different app to macOS, and its entry keeps showing itself as enabled while granting \
             nothing.\(remediateStaleEntry(runningBundlePath))
             """
@@ -112,7 +112,7 @@ public enum InputPermissionAlertBody {
         guard isAppBundle(bundlePath) else {
             return ""
         }
-        return " Remove that entry with “−” and add this copy of Ward instead."
+        return " If you find one, remove it with “−” and add this copy of Ward instead."
     }
 
     /// A blank path is not evidence of anything, so it takes the standard body:
