@@ -16,17 +16,9 @@ public enum InputPermissions {
         promptSystemAccessibilityDialog()
         presentSettingsAlert(
             messageText: "Ward needs Accessibility access",
-            // "Enable Ward" is the obvious instruction and it is the wrong one
-            // after a rebuild: the previous build's entry is still listed, still
-            // switched on, and grants nothing, so following it changes nothing
-            // and gives no clue why.
-            informativeText: """
-            Blocking the keyboard and trackpad requires Accessibility access. Open System Settings → \
-            Privacy & Security → Accessibility, then click Start Cleaning Mode again.
-
-            If Ward is already listed there, remove it with “−” and add it back. A rebuilt Ward is a \
-            new app to macOS, and the old entry keeps showing itself as enabled while granting nothing.
-            """,
+            informativeText: InputPermissionAlertBody.describeMissingAccessibility(
+                runningBundlePath: runningBundlePath
+            ),
             settingsButtonTitle: "Open Accessibility Settings",
             settingsURLString: accessibilitySettingsURLString
         )
@@ -39,14 +31,16 @@ public enum InputPermissions {
         CGRequestListenEventAccess()
         presentSettingsAlert(
             messageText: "Ward can’t lock input yet",
-            informativeText: """
-            macOS refused the input-blocking tap. Enable Ward under Privacy & Security → \
-            Input Monitoring (and confirm it is still enabled under Accessibility), then try again. \
-            If you just granted access, quit and relaunch Ward first.
-            """,
+            informativeText: InputPermissionAlertBody.describeRefusedInputTap(
+                runningBundlePath: runningBundlePath
+            ),
             settingsButtonTitle: "Open Input Monitoring Settings",
             settingsURLString: inputMonitoringSettingsURLString
         )
+    }
+
+    private static var runningBundlePath: String {
+        return Bundle.main.bundleURL.path
     }
 
     private static func promptSystemAccessibilityDialog() {
