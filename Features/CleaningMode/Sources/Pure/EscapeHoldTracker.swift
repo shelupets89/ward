@@ -24,7 +24,7 @@ public struct EscapeHoldTracker {
     public let requiredHoldDuration: Duration
     public private(set) var state: HoldState = .idle(areModifiersDown: false)
 
-    public init(requiredHoldDuration: Duration = EscapeHoldTracker.defaultHoldDuration) {
+    public init(requiredHoldDuration: Duration = Self.defaultHoldDuration) {
         // `clampedHoldDuration` is what actually holds the gesture usable. This
         // only speaks up in a debug build that constructs one badly, which no
         // path here currently does — as a `precondition` it would fire while

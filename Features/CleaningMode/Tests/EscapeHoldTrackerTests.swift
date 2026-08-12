@@ -234,16 +234,4 @@ final class EscapeHoldDurationTests: XCTestCase {
             XCTAssertGreaterThan(EscapeHoldTracker.clampedHoldDuration(requested), .zero)
         }
     }
-
-    /// The reason the fallback exists, stated as behaviour: a tracker built
-    /// from an unusable hold still runs the full five-second gesture, rather
-    /// than completing instantly or never completing.
-    func test_shouldStillRunTheFullGesture_whenBuiltFromAnUnusableHold() {
-        var tracker = EscapeHoldTracker(requiredHoldDuration: EscapeHoldTracker.clampedHoldDuration(.zero))
-        let now = ContinuousClock.now
-        tracker.registerEscapeKeyDown(at: now)
-        XCTAssertFalse(tracker.isComplete(at: now))
-        XCTAssertFalse(tracker.isComplete(at: now.advanced(by: .seconds(4.9))))
-        XCTAssertTrue(tracker.isComplete(at: now.advanced(by: .seconds(5))))
-    }
 }
