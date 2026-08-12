@@ -46,6 +46,12 @@ public final class CappedSession {
         return expiryTimer.timesArmed
     }
 
+    /// The interval the check actually runs at, which is the requested one only
+    /// once it has cleared `ExpiryCheckInterval`.
+    var expiryCheckInterval: TimeInterval {
+        return expiryTimer.interval
+    }
+
     /// Starts a session and arms the check that will end it, reporting whether
     /// it did.
     ///

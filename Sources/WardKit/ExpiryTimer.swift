@@ -27,7 +27,7 @@ import Foundation
 /// `CappedSession` exists to prevent. It is also a Swift 6 language-mode error.
 @MainActor
 final class ExpiryTimer {
-    private let interval: TimeInterval
+    let interval: TimeInterval
     private let onTick: @MainActor () -> Void
     private var scheduledTimer: Timer?
 

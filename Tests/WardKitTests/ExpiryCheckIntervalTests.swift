@@ -7,6 +7,14 @@ import Testing
 /// never firing. These cases pin the floor that keeps that out of a shipped
 /// build, where the assert beside it has been compiled away.
 struct ExpiryCheckIntervalTests {
+    /// Pinned rather than compared to itself. Every other case here asks only
+    /// that the floor is self-consistent, which a decimal-point slip would
+    /// satisfy just as well — and a floor of a millisecond still spins.
+    @Test("Puts the floor at one second")
+    func floorIsOneSecond() {
+        #expect(ExpiryCheckInterval.shortest == 1)
+    }
+
     @Test("Holds a zero interval up to the floor rather than letting it spin")
     func clampsZero() {
         #expect(ExpiryCheckInterval.clamped(0) == ExpiryCheckInterval.shortest)

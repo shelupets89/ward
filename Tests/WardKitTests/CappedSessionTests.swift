@@ -133,6 +133,22 @@ struct CappedSessionTests {
         )
     }
 
+    /// The floor is only worth having if the session actually runs it through.
+    /// A below-floor value rather than an invalid one, so the assert alongside
+    /// the clamp is not what this ends up measuring.
+    @Test("Runs the requested interval through the floor rather than taking it as given")
+    func holdsTheRequestedIntervalToTheFloor() {
+        let belowTheFloor = ExpiryCheckInterval.shortest / 2
+        let session = CappedSession(expiryCheckInterval: belowTheFloor, onExpiry: {})
+
+        #expect(session.expiryCheckInterval == ExpiryCheckInterval.shortest)
+    }
+
+    @Test("Leaves an interval above the floor as the caller asked for it")
+    func leavesAUsableIntervalAlone() {
+        #expect(makeSession().expiryCheckInterval == Self.neverFiresWithinATest)
+    }
+
     @Test("Reports the session it was given, for as long as it is running")
     func reportsTheRunningSession() {
         let session = makeSession()
