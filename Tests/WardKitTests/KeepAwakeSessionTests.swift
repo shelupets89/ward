@@ -45,6 +45,25 @@ struct KeepAwakeSessionTests {
         let session = KeepAwakeSession(startedAt: startInstant, duration: .seconds(60))
         #expect(session.remaining(at: startInstant.advanced(by: .seconds(600))) == .zero)
     }
+
+    /// The reason this type traps on nothing. A duration that is not positive
+    /// is a developer mistake, but it is a *defined* one: the session is born
+    /// expired, so the first expiry check restores the setting rather than a
+    /// trap stranding it. These pin that, since it is the whole argument for
+    /// letting a bad duration through instead of dying on it.
+    @Test("Is already expired at its own start when built with a non-positive duration",
+          arguments: [Duration.zero, .seconds(-1), .seconds(-99999)])
+    func isBornExpiredWhenDurationIsNotPositive(duration: Duration) {
+        let session = KeepAwakeSession(startedAt: startInstant, duration: duration)
+        #expect(session.isExpired(at: startInstant))
+    }
+
+    @Test("Reports nothing remaining when built with a non-positive duration",
+          arguments: [Duration.zero, .seconds(-1)])
+    func reportsNothingRemainingWhenDurationIsNotPositive(duration: Duration) {
+        let session = KeepAwakeSession(startedAt: startInstant, duration: duration)
+        #expect(session.remaining(at: startInstant) == .zero)
+    }
 }
 
 struct KeepAwakeDurationTests {

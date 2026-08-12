@@ -13,8 +13,17 @@ public struct KeepAwakeSession: Equatable, Sendable {
     public let startedAt: ContinuousClock.Instant
     public let duration: Duration
 
+    /// A duration that is not positive is a developer mistake, but a *defined*
+    /// one rather than a trap: the session is born expired, so the first check
+    /// restores what was taken. Both callers arrive having already taken it —
+    /// `pmset -a disablesleep 1` for lid-closed, a display assertion for screen
+    /// keep-awake — so dying here would strand exactly what this type bounds.
+    ///
+    /// Nothing is clamped either, unlike `ExpiryCheckInterval`. Honouring a bad
+    /// duration expires immediately, already the direction a fail-closed
+    /// feature has to fail in; rounding one up to something usable would hold
+    /// the setting for a stretch nobody asked for.
     public init(startedAt: ContinuousClock.Instant, duration: Duration) {
-        precondition(duration > .zero, "duration must be positive")
         self.startedAt = startedAt
         self.duration = duration
     }

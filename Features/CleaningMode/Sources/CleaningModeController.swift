@@ -5,7 +5,10 @@ import WardKit
 /// event tap, shield windows, kiosk options, and the esc-hold exit gesture.
 @MainActor
 public final class CleaningModeController: NSObject {
-    private static let requiredHoldSeconds = 5
+    /// Derived rather than restated: the overlay text and the tracker's
+    /// fallback have to name the same gesture, and two literals would let a
+    /// change to one leave the other quietly behind.
+    private static let requiredHoldSeconds = Int(EscapeHoldTracker.defaultHoldDuration.components.seconds)
     private static let progressUpdateInterval: TimeInterval = 1.0 / 30.0
     private static let secureInputCheckInterval: TimeInterval = 1
     private static let kioskPresentationOptions: NSApplication.PresentationOptions = [
