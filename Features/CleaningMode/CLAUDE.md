@@ -21,10 +21,12 @@
 
 ## Layout
 
-`Sources/Pure/` — `EscapeHoldTracker`, `WatchedModifiers`, `SystemDefinedKeyEventDecoder`. Fully tested; keep new decidable logic here.
+`Sources/Pure/` — `EscapeHoldTracker`, `WatchedModifiers`, `EscapeKeyCode`, `SystemDefinedKeyEventDecoder`. Fully tested; keep new decidable logic here. AppKit *value* types are fine here (`WatchedModifiers` takes `CGEventFlags`); what disqualifies code is needing a live AppKit object.
 
-`Sources/` — event tap, shield windows, SwiftUI overlay, controller. Mostly needs a running app and Accessibility, so it isn't unit-testable; `InputEventHandlers` is the exception — it is the routing table both input sources share, and it *is* tested.
+`Sources/` — event tap, shield windows, SwiftUI overlay, controller. Most of it needs a running app and Accessibility, so it isn't unit-testable. `InputEventHandlers` is not: it is the routing table both input sources share, and it *is* tested.
 
 ## Isolation
 
-`CleaningModeController`, `ShieldWindowsController` and the `InputEventHandlers` closures are all `@MainActor`, so the exit-gesture path is compiler-checked end to end. Three `MainActor.assumeIsolated` bridges remain, each at a framework callback whose block type cannot carry isolation, each justified in one line at the site: the tap's `DispatchQueue.main.async` hop, `makeMainRunLoopTimer` (both `Timer`s go through it), and the `NSEvent` local monitor. Only value types cross those boundaries — that is why `MonitoredKeyEvent` exists rather than passing `NSEvent`. Adding a fourth bridge should feel like a design smell; prefer declaring isolation.
+`CleaningModeController`, `ShieldWindowsController` and the `InputEventHandlers` closures are all `@MainActor`, so the exit-gesture path is compiler-checked end to end. Two `MainActor.assumeIsolated` bridges remain, each at a framework callback whose block type cannot carry isolation, each justified at the site: `makeMainRunLoopTimer` (both `Timer`s go through it) and the `NSEvent` local monitor. Only value types cross those boundaries — that is why `MonitoredKeyEvent` exists rather than passing `NSEvent`.
+
+The tap's `DispatchQueue.main.async` hop needs **no** bridge: the compiler treats a literal `DispatchQueue.main.async` block as main-actor isolated. That recognition is syntactic, so hoisting the queue into a local silently loses it — but it fails as a compile error, not at run time. Adding a third bridge should feel like a design smell; prefer declaring isolation.

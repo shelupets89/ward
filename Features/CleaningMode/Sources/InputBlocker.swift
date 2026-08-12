@@ -79,7 +79,7 @@ final class InputBlocker {
     }
 
     private func routeKeyboardEvent(type: CGEventType, event: CGEvent) {
-        let isEscapeKey = event.getIntegerValueField(.keyboardEventKeycode) == Int64(kVK_Escape)
+        let isEscapeKey = EscapeKeyCode.matches(event.getIntegerValueField(.keyboardEventKeycode))
         let isKeyDown = type == .keyDown
         deliverToHandlers { handlers in
             handlers.routeKeyEvent(isEscapeKey: isEscapeKey, isKeyDown: isKeyDown)
@@ -130,16 +130,14 @@ final class InputBlocker {
     /// port mid-dispatch), so delivery is deferred to a later run loop turn
     /// rather than unwinding through the callback that triggered it.
     ///
-    /// The hop also has to reach main-actor handlers from a nonisolated type,
-    /// and `DispatchQueue.main.async` takes a `@Sendable` block that cannot
-    /// carry isolation. Asserting it inside a block already running on
-    /// `DispatchQueue.main` is sound rather than a workaround, and this is the
-    /// only place in the feature where the tap crosses into isolated state.
+    /// No isolation bridge is needed to reach the main-actor handlers: the
+    /// compiler treats a literal `DispatchQueue.main.async` block as main-actor
+    /// isolated. That recognition is syntactic — hoisting the queue into a
+    /// local would lose it — but it fails loudly if anyone does, so this stays
+    /// checked rather than asserted.
     private func deliverToHandlers(_ deliver: @escaping @Sendable @MainActor (InputEventHandlers) -> Void) {
         DispatchQueue.main.async { [handlers] in
-            MainActor.assumeIsolated {
-                deliver(handlers)
-            }
+            deliver(handlers)
         }
     }
 }

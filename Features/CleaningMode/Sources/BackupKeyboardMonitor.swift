@@ -62,7 +62,7 @@ private struct MonitoredKeyEvent: Sendable {
 
     init(_ event: NSEvent) {
         type = event.type
-        isEscapeKey = event.keyCode == UInt16(kVK_Escape)
+        isEscapeKey = EscapeKeyCode.matches(event.keyCode)
         areModifiersDown = WatchedModifiers.areDown(in: event.modifierFlags)
     }
 }

@@ -6,9 +6,10 @@ import AppKit
 /// Only the single-OK shape lives here. Alerts that ask the user to *choose*
 /// — restore or leave it, quit anyway or cancel — carry the decision in their
 /// button titles and belong with the feature that has to interpret the answer.
-/// Isolated, because `NSAlert` is. Every caller lives on a `@MainActor` type
-/// and so keeps full compile-time checking — which an unisolated helper would
-/// have silently given up on their behalf.
+/// Isolated, because `NSAlert` is. Every caller now declares the isolation it
+/// needs rather than asserting it, so the whole chain keeps full compile-time
+/// checking — which an unisolated helper would have silently given up on their
+/// behalf.
 @MainActor
 public enum WardAlert {
     public static func presentFailure(messageText: String, informativeText: String) {
