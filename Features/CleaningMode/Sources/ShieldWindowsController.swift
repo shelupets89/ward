@@ -3,6 +3,7 @@ import WardKit
 import SwiftUI
 
 /// Covers every screen with a black borderless window above all other UI.
+@MainActor
 final class ShieldWindowsController {
     private let overlayModel: ShieldOverlayModel
     private var shieldWindows: [NSWindow] = []

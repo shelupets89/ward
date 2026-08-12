@@ -14,6 +14,8 @@
 
 - The tap callback returns `nil` for *everything*, including `tapDisabled*` notifications. Anything else leaks an event through.
 - The tap runs on the main run loop, so the `DispatchQueue.main.async` hops are technically redundant — but two reviewers disagreed on whether they're load-bearing for the self-invalidation path in `recoverDisabledTap()`. Left in deliberately; don't "simplify" without testing that path on-device.
+- **`startProgressTimerIfNeeded`'s nil-guard is load-bearing.** Every input event while holding reaches it, auto-repeat esc key-downs included, and those can outpace the 1/30 s tick. Restart-on-every-call would starve the timer — and `handleProgressTick` is the only thing that ever notices a completed hold and exits. Don't replace it with anything whose `start()` stops first (`WardKit.ExpiryTimer` does).
+- **`InputBlocker` is deliberately *not* `@MainActor`.** It owns no isolated state, so the `CGEvent.tapCreate` C callback reaches it with no bridge at all. Isolating it would just move the bridge into the callback without removing one.
 - Borderless windows refuse key status by default. `KeyableShieldWindow` overrides it so the backup monitor receives events.
 - `NSScreen.screens` can legitimately return empty mid-reconfiguration. Guarded — don't remove.
 
@@ -21,4 +23,8 @@
 
 `Sources/Pure/` — `EscapeHoldTracker`, `WatchedModifiers`, `SystemDefinedKeyEventDecoder`. Fully tested; keep new decidable logic here.
 
-`Sources/` — event tap, shield windows, SwiftUI overlay, controller. Needs a running app and Accessibility; not unit-testable.
+`Sources/` — event tap, shield windows, SwiftUI overlay, controller. Mostly needs a running app and Accessibility, so it isn't unit-testable; `InputEventHandlers` is the exception — it is the routing table both input sources share, and it *is* tested.
+
+## Isolation
+
+`CleaningModeController`, `ShieldWindowsController` and the `InputEventHandlers` closures are all `@MainActor`, so the exit-gesture path is compiler-checked end to end. Three `MainActor.assumeIsolated` bridges remain, each at a framework callback whose block type cannot carry isolation, each justified in one line at the site: the tap's `DispatchQueue.main.async` hop, `makeMainRunLoopTimer` (both `Timer`s go through it), and the `NSEvent` local monitor. Only value types cross those boundaries — that is why `MonitoredKeyEvent` exists rather than passing `NSEvent`. Adding a fourth bridge should feel like a design smell; prefer declaring isolation.

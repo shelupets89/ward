@@ -8,10 +8,10 @@ import Foundation
 /// scheduled eight hours out would come back late by however long the machine
 /// slept. Re-asking "is it expired yet?" is immune to that.
 ///
-/// Centralising it also gives the `assumeIsolated` bridge one home: `Timer`'s
-/// callback is `@Sendable`, but a timer added to `RunLoop.main` always fires on
-/// the main thread, so asserting that isolation is correct rather than a
-/// workaround.
+/// Centralising it also keeps the `assumeIsolated` bridge out of every capped
+/// feature: `Timer`'s callback is `@Sendable`, but a timer added to
+/// `RunLoop.main` always fires on the main thread, so asserting that isolation
+/// is correct rather than a workaround.
 ///
 /// `onTick` is retained for the timer's lifetime, so a controller that owns its
 /// `ExpiryTimer` must capture itself weakly in the closure.

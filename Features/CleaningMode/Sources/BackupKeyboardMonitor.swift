@@ -18,8 +18,15 @@ final class BackupKeyboardMonitor {
             return true
         }
         let watchedEvents: NSEvent.EventTypeMask = [.keyDown, .keyUp, .flagsChanged]
+        // The monitor block is nonisolated, but a local monitor is only ever
+        // called from the app's own event dispatch — so asserting the main
+        // actor here is sound, and it has to be asserted synchronously: the
+        // block's return value is what consumes the event.
         monitor = NSEvent.addLocalMonitorForEvents(matching: watchedEvents) { [handlers] event in
-            BackupKeyboardMonitor.route(event, to: handlers)
+            let monitoredEvent = MonitoredKeyEvent(event)
+            MainActor.assumeIsolated {
+                BackupKeyboardMonitor.route(monitoredEvent, to: handlers)
+            }
             return nil
         }
         return monitor != nil
@@ -32,17 +39,30 @@ final class BackupKeyboardMonitor {
         monitor = nil
     }
 
-    private static func route(_ event: NSEvent, to handlers: InputEventHandlers) {
+    @MainActor
+    private static func route(_ event: MonitoredKeyEvent, to handlers: InputEventHandlers) {
         switch event.type {
         case .keyDown, .keyUp:
-            handlers.routeKeyEvent(
-                isEscapeKey: event.keyCode == UInt16(kVK_Escape),
-                isKeyDown: event.type == .keyDown
-            )
+            handlers.routeKeyEvent(isEscapeKey: event.isEscapeKey, isKeyDown: event.type == .keyDown)
         case .flagsChanged:
-            handlers.onModifiersChanged(WatchedModifiers.areDown(in: event.modifierFlags))
+            handlers.onModifiersChanged(event.areModifiersDown)
         default:
             break
         }
+    }
+}
+
+/// Everything the hold gesture needs from a monitored event, read off `NSEvent`
+/// before the hop to the main actor — `NSEvent` is not `Sendable` and these
+/// three facts are, so nothing but value types crosses the boundary.
+private struct MonitoredKeyEvent: Sendable {
+    let type: NSEvent.EventType
+    let isEscapeKey: Bool
+    let areModifiersDown: Bool
+
+    init(_ event: NSEvent) {
+        type = event.type
+        isEscapeKey = event.keyCode == UInt16(kVK_Escape)
+        areModifiersDown = WatchedModifiers.areDown(in: event.modifierFlags)
     }
 }

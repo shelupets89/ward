@@ -129,9 +129,17 @@ final class InputBlocker {
     /// tap down (`onIrrecoverableFailure` → `stop()` invalidates the very mach
     /// port mid-dispatch), so delivery is deferred to a later run loop turn
     /// rather than unwinding through the callback that triggered it.
-    private func deliverToHandlers(_ deliver: @escaping (InputEventHandlers) -> Void) {
+    ///
+    /// The hop also has to reach main-actor handlers from a nonisolated type,
+    /// and `DispatchQueue.main.async` takes a `@Sendable` block that cannot
+    /// carry isolation. Asserting it inside a block already running on
+    /// `DispatchQueue.main` is sound rather than a workaround, and this is the
+    /// only place in the feature where the tap crosses into isolated state.
+    private func deliverToHandlers(_ deliver: @escaping @Sendable @MainActor (InputEventHandlers) -> Void) {
         DispatchQueue.main.async { [handlers] in
-            deliver(handlers)
+            MainActor.assumeIsolated {
+                deliver(handlers)
+            }
         }
     }
 }
