@@ -120,12 +120,17 @@ struct CappedSessionTests {
         let session = makeSession()
         let started = makeHalfHour()
         #expect(session.begin(started))
+        let armedBeforeTheSecondStart = session.timesExpiryCheckArmed
 
         let didBeginAgain = session.begin(KeepAwakeSession(startedAt: .now, duration: .seconds(8 * 3600)))
 
         #expect(didBeginAgain == false)
         #expect(session.current == started)
         #expect(session.isExpiryCheckScheduled, "a refused start must not disarm the running session's check")
+        #expect(
+            session.timesExpiryCheckArmed == armedBeforeTheSecondStart,
+            "a refused start must leave the check alone, not restart it and push the next poll back"
+        )
     }
 
     @Test("Reports the session it was given, for as long as it is running")

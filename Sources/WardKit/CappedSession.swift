@@ -38,6 +38,12 @@ public final class CappedSession {
         return expiryTimer.isScheduled
     }
 
+    /// How many times the check has been armed, so a test can tell a check that
+    /// was left alone from one that was silently restarted.
+    var timesExpiryCheckArmed: Int {
+        return expiryTimer.timesArmed
+    }
+
     /// Starts a session and arms the check that will end it, reporting whether
     /// it did.
     ///

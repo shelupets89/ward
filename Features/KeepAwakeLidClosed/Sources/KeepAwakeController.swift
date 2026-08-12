@@ -129,7 +129,6 @@ public final class KeepAwakeController: NSObject {
     /// it keeps retrying; a restore that failed once is exactly when the safety
     /// net matters most. `CappedSession.end(by:)` is what holds that ordering,
     /// and this method has no timer of its own to get it wrong with.
-    @discardableResult
     func stop(allowInteractivePrompt: Bool) -> Bool {
         guard cappedSession.current != nil else {
             return true

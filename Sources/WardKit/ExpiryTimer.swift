@@ -45,8 +45,17 @@ final class ExpiryTimer {
         return scheduledTimer != nil
     }
 
+    /// How many times the check has been armed.
+    ///
+    /// `isScheduled` cannot tell "left alone" from "stopped and replaced" —
+    /// `start()` does both, and leaves a timer either side. This can, which is
+    /// what lets a test pin that refusing to start a session does not quietly
+    /// restart the running one's check and push its next poll back.
+    private(set) var timesArmed = 0
+
     func start() {
         stop()
+        timesArmed += 1
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.onTick()
