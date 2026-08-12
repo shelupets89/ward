@@ -22,7 +22,13 @@ jobs:
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
+      # `ref` for the same reason TAG is computed above: on a dispatch the branch
+      # the run started from is not the tag being released, and everything below
+      # reads this tree — including the Info.plist the version check compares the
+      # tag against. On a tag push github.ref_name is the tag, so this is a no-op.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       # The tap is published by a later job, but a missing token discovered
       # there would surface only after this job has made the release public —
@@ -118,7 +124,14 @@ jobs:
       TAP_REPO: shelupets89/homebrew-ward
       FORMULA_PATH: Formula/ward.rb
     steps:
+      # Without `ref` this takes github.ref — the branch a dispatch was started
+      # from — so render-formula.sh would read the template out of one commit
+      # while pinning `url` to a different commit's tarball. The formula body and
+      # the source it describes would come from two different trees, and every
+      # step below would still pass.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - name: Render the formula for this tag
         run: |
@@ -127,6 +140,24 @@ jobs:
 
       - name: Fill in the tag's url and checksum
         run: bash scripts/render-formula.sh "${TAG}" "${RENDERED}"
+
+      # `brew install` never reads the metadata stanzas, so a typo'd SPDX id or a
+      # malformed `desc` would install, test, and ship. ci.yml gates on these —
+      # but ci.yml never sees the file that reaches users, which is this one.
+      #
+      # What this cannot do is check that a value is *true*. Homebrew's licence
+      # cross-check is gated on `@core_tap`, so for a third-party tap it is
+      # unreachable and no flag re-enables it: `license "MIT"` against a GPL repo
+      # audits clean. Malformed metadata is caught here; wrong metadata is not.
+      - name: brew style
+        run: brew style shelupets89/ward
+
+      # `--online` reaches the GitHub API, which rate-limits unauthenticated
+      # runners hard enough to make this flaky without a token.
+      - name: brew audit
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+        run: brew audit --strict --online shelupets89/ward/ward
 
       # A formula is only as good as the install it produces, and the failure
       # mode this guards against is silent: the tap keeps serving a formula that
@@ -160,8 +191,38 @@ jobs:
             exit 1
           fi
 
-          gh api --method PUT "repos/${TAP_REPO}/contents/${FORMULA_PATH}" \
+          # No `shell:` key anywhere in this workflow, so the default is
+          # `bash -e {0}` and pipefail is off. Inline as `-f content="$(base64
+          # … | tr …)"` the pipeline reported `tr`'s status, which is always 0,
+          # and a failed command substitution used as an argument does not trip
+          # `set -e` either — an unreadable RENDERED would have PUT an empty
+          # body and printed a commit URL for a 0-byte formula on the live tap.
+          # Split so `set -e` sees base64's own status, with the newline strip
+          # done as a parameter expansion rather than a second pipe to hide one
+          # behind.
+          if [ ! -s "${RENDERED}" ]; then
+            echo "::error::${RENDERED} is empty or missing — refusing to publish it."
+            exit 1
+          fi
+          WRAPPED_CONTENT="$(base64 -i "${RENDERED}")"
+          CONTENT="${WRAPPED_CONTENT//$'\n'/}"
+
+          PUT_RESULT="$(gh api --method PUT "repos/${TAP_REPO}/contents/${FORMULA_PATH}" \
             -f message="🍺 chore(formula): ward ${TAG}" \
-            -f content="$(base64 -i "${RENDERED}" | tr -d '\n')" \
+            -f content="${CONTENT}" \
             ${CURRENT_SHA:+-f sha="${CURRENT_SHA}"} \
-            --jq .commit.html_url
+            --jq '[.content.sha, .commit.html_url] | @tsv')"
+          IFS=$'\t' read -r PUBLISHED_BLOB COMMIT_URL <<< "${PUT_RESULT}"
+
+          # Any 2xx prints a commit URL whatever bytes it stored, so the URL on
+          # its own is not evidence the tap serves what was tested here. The
+          # response's blob id is git's hash of what the tap now holds, and
+          # `git hash-object` is that same function run locally, so comparing
+          # them is a byte-for-byte claim about the published file.
+          EXPECTED_BLOB="$(git hash-object "${RENDERED}")"
+          if [ "${PUBLISHED_BLOB}" != "${EXPECTED_BLOB}" ]; then
+            echo "::error::${TAP_REPO}/${FORMULA_PATH} is now blob ${PUBLISHED_BLOB}, but the formula proven above hashes to ${EXPECTED_BLOB} — the tap is not serving what was tested."
+            exit 1
+          fi
+
+          echo "${COMMIT_URL}"
