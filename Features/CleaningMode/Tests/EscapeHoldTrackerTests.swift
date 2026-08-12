@@ -199,3 +199,51 @@ final class EscapeHoldTrackerTests: XCTestCase {
         XCTAssertFalse(tracker.isHolding)
     }
 }
+
+/// A non-positive hold divides `progress` by zero or by a negative, and neither
+/// result is a gesture: zero completes on the first key-down, so a cloth leaves
+/// cleaning mode, and a negative one never reaches 1 at all, so the shield keeps
+/// input blocked with the exit it documents unable to fire. These cases pin the
+/// fallback that keeps both out of a shipped build, where the assert beside it
+/// has been compiled away.
+final class EscapeHoldDurationTests: XCTestCase {
+    func test_shouldFallBackToTheDefaultHold_whenGivenZero() {
+        XCTAssertEqual(EscapeHoldTracker.clampedHoldDuration(.zero), EscapeHoldTracker.defaultHoldDuration)
+    }
+
+    func test_shouldFallBackToTheDefaultHold_whenGivenANegativeHold() {
+        XCTAssertEqual(EscapeHoldTracker.clampedHoldDuration(.seconds(-5)), EscapeHoldTracker.defaultHoldDuration)
+    }
+
+    /// Falls back to the shipped hold rather than a short floor: a floor would
+    /// answer the crash by quietly weakening the gesture the feature exists for.
+    func test_shouldFallBackToFiveSeconds_ratherThanToAShorterFloor() {
+        XCTAssertEqual(EscapeHoldTracker.defaultHoldDuration, .seconds(5))
+    }
+
+    /// The hold the controller actually passes. Clamping must be invisible to
+    /// every real caller, including ones asking for a longer, stricter gesture.
+    func test_shouldPassThroughTheHoldsRealCallersUse() {
+        for requested in [Duration.seconds(5), .seconds(1), .seconds(30)] {
+            XCTAssertEqual(EscapeHoldTracker.clampedHoldDuration(requested), requested)
+        }
+    }
+
+    func test_shouldNeverReturnAHoldThatProgressCannotDivideBy() {
+        for requested in [Duration.zero, .seconds(-1), .milliseconds(-1), .seconds(-99999)] {
+            XCTAssertGreaterThan(EscapeHoldTracker.clampedHoldDuration(requested), .zero)
+        }
+    }
+
+    /// The reason the fallback exists, stated as behaviour: a tracker built
+    /// from an unusable hold still runs the full five-second gesture, rather
+    /// than completing instantly or never completing.
+    func test_shouldStillRunTheFullGesture_whenBuiltFromAnUnusableHold() {
+        var tracker = EscapeHoldTracker(requiredHoldDuration: EscapeHoldTracker.clampedHoldDuration(.zero))
+        let now = ContinuousClock.now
+        tracker.registerEscapeKeyDown(at: now)
+        XCTAssertFalse(tracker.isComplete(at: now))
+        XCTAssertFalse(tracker.isComplete(at: now.advanced(by: .seconds(4.9))))
+        XCTAssertTrue(tracker.isComplete(at: now.advanced(by: .seconds(5))))
+    }
+}

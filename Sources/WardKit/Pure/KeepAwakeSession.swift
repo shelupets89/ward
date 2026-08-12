@@ -14,7 +14,20 @@ public struct KeepAwakeSession: Equatable, Sendable {
     public let duration: Duration
 
     public init(startedAt: ContinuousClock.Instant, duration: Duration) {
-        precondition(duration > .zero, "duration must be positive")
+        // Deliberately not a `precondition`: the lid-closed caller reaches here
+        // only once `pmset disablesleep 1` has already succeeded, so a release
+        // trap would strand exactly the setting this type exists to bound.
+        //
+        // Nothing is clamped alongside it, unlike `ExpiryCheckInterval`. A
+        // non-positive duration puts `expiresAt` at or before `startedAt`, so
+        // the session is born expired and the first check restores sleep —
+        // already the direction a fail-closed feature has to fail in. Rounding
+        // one up to something usable would hold the setting for a stretch
+        // nobody asked for, which is the failure worth avoiding here.
+        //
+        // `KeepAwakeDuration` is what holds real callers positive, and
+        // `KeepAwakeDurationTests` is where that is checked.
+        assert(duration > .zero, "duration must be positive")
         self.startedAt = startedAt
         self.duration = duration
     }

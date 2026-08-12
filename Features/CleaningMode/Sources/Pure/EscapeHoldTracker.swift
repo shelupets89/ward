@@ -17,12 +17,40 @@ public struct EscapeHoldTracker {
         case suppressedUntilRelease(areModifiersDown: Bool)
     }
 
+    /// The gesture the feature ships with, and what an unusable one falls back
+    /// to.
+    public static let defaultHoldDuration: Duration = .seconds(5)
+
     public let requiredHoldDuration: Duration
     public private(set) var state: HoldState = .idle(areModifiersDown: false)
 
-    public init(requiredHoldDuration: Duration = .seconds(5)) {
-        precondition(requiredHoldDuration > .zero, "requiredHoldDuration must be positive")
-        self.requiredHoldDuration = requiredHoldDuration
+    public init(requiredHoldDuration: Duration = EscapeHoldTracker.defaultHoldDuration) {
+        // `clampedHoldDuration` is what actually holds the gesture usable. This
+        // only speaks up in a debug build that constructs one badly, which no
+        // path here currently does — as a `precondition` it would fire while
+        // `AppDelegate` builds its feature list, ahead of every feature's
+        // `recoverLeakedState()`, and so take out the lid-closed restore offer
+        // on a Mac still carrying the setting a crash left behind.
+        assert(requiredHoldDuration > .zero, "requiredHoldDuration must be positive")
+        self.requiredHoldDuration = Self.clampedHoldDuration(requiredHoldDuration)
+    }
+
+    /// The hold the gesture actually runs, which is the requested one only once
+    /// it is positive.
+    ///
+    /// Applied rather than checked, because the two unusable values fail in
+    /// opposite directions and neither is a gesture: zero divides to `inf` in
+    /// `progress`, completing on the first key-down so a cloth leaves cleaning
+    /// mode, while a negative one clamps to zero progress and never completes
+    /// at all, leaving input blocked with the documented exit unable to fire.
+    ///
+    /// Falls back to the shipped hold rather than to a short floor — a floor
+    /// would answer this by quietly weakening the gesture the feature is for.
+    public static func clampedHoldDuration(_ requested: Duration) -> Duration {
+        guard requested > .zero else {
+            return defaultHoldDuration
+        }
+        return requested
     }
 
     public var areModifiersDown: Bool {

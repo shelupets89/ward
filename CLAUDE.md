@@ -74,6 +74,7 @@ Launch the built `.app`, never `swift run` — TCC grants attach to whatever lau
 
 - Never write to `/etc/sudoers.d` or `/etc/pam.d` without validating the staged file first.
 - Never weaken the cloth-proof esc-hold gesture. Changes there need tests.
+- **No `precondition` or `fatalError` on a developer constant, in any feature.** `AppDelegate.features` constructs every controller before `applicationDidFinishLaunching` runs a single `recoverLeakedState()`, so a trap while building *any* feature — including a fail-open one — kills the launch that would have offered to clear a `pmset disablesleep` a crash left behind. Fail-closed features have the same problem later, mid-session, once the setting is already flipped. Use `assert` for the developer signal, and make the value usable in release (`ExpiryCheckInterval.clamped`, `EscapeHoldTracker.clampedHoldDuration`) wherever the degradation isn't already safe.
 - Timing uses `ContinuousClock`, never `Date()`.
 - `os.Logger` via `WardLogger`, never `print()`.
 - Failures the user would want to know about get an `NSAlert`, not just a log line.
