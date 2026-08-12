@@ -16,11 +16,9 @@ public enum ExpiryCheckInterval {
     /// often than this buys nothing.
     public static let shortest: TimeInterval = 1
 
-    /// Non-finite intervals are held to the floor rather than passed on. `max`
-    /// cannot do it: every comparison against `nan` is false, so `nan` would
-    /// come straight back out. And an infinite interval is the worse of the two
-    /// — a check that never fires at all, on a session whose cap is the thing
-    /// the check exists to enforce.
+    /// Non-finite intervals are held to the floor rather than passed on, and
+    /// `max` alone cannot do it: every comparison against `nan` is false, so
+    /// `nan` would come straight back out.
     public static func clamped(_ requested: TimeInterval) -> TimeInterval {
         guard requested.isFinite else {
             return shortest

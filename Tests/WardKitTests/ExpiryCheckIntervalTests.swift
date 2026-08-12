@@ -2,10 +2,11 @@ import Foundation
 import Testing
 @testable import WardKit
 
-/// A non-positive interval is the one input that makes `Timer` do the opposite
-/// of what it looks like — spinning at thousands of ticks a second rather than
-/// never firing. These cases pin the floor that keeps that out of a shipped
-/// build, where the assert beside it has been compiled away.
+/// A non-positive interval makes `Timer` do the opposite of what it looks like,
+/// spinning rather than never firing. These cases pin the floor that keeps that
+/// — and every other interval `Timer` would read as something the caller did
+/// not ask for — out of a shipped build, where the assert beside it has been
+/// compiled away.
 struct ExpiryCheckIntervalTests {
     /// Pinned rather than compared to itself. Every other case here asks only
     /// that the floor is self-consistent, which a decimal-point slip would
@@ -49,9 +50,9 @@ struct ExpiryCheckIntervalTests {
         #expect(ExpiryCheckInterval.clamped(.nan) == ExpiryCheckInterval.shortest)
     }
 
-    /// An infinite interval is the failure the other direction: a check that
-    /// never fires at all, on a session whose cap it exists to enforce.
-    @Test("Holds an infinite interval down to the floor", arguments: [TimeInterval.infinity, -.infinity])
+    /// `Timer` does something different with each of these and none of it is a
+    /// check running at the rate the caller asked for, so neither reaches it.
+    @Test("Holds an infinite interval to the floor", arguments: [TimeInterval.infinity, -.infinity])
     func clampsInfinite(interval: TimeInterval) {
         #expect(ExpiryCheckInterval.clamped(interval) == ExpiryCheckInterval.shortest)
     }
