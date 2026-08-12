@@ -31,7 +31,7 @@ struct CappedSessionTests {
     @Test("Arms the expiry check as soon as a session begins")
     func armsTheCheckOnBegin() {
         let session = makeSession()
-        session.begin(makeHalfHour())
+        #expect(session.begin(makeHalfHour()))
         #expect(session.isExpiryCheckScheduled)
         #expect(session.current != nil)
     }
@@ -42,7 +42,7 @@ struct CappedSessionTests {
     @Test("Leaves the expiry check armed when the work that ends the session fails")
     func keepsTheCheckArmedWhenEndingFails() {
         let session = makeSession()
-        session.begin(makeHalfHour())
+        #expect(session.begin(makeHalfHour()))
 
         let didEnd = session.end { false }
 
@@ -54,7 +54,7 @@ struct CappedSessionTests {
     func keepsTheSessionWhenEndingFails() {
         let session = makeSession()
         let started = makeHalfHour()
-        session.begin(started)
+        #expect(session.begin(started))
 
         session.end { false }
 
@@ -66,7 +66,7 @@ struct CappedSessionTests {
     @Test("Ends the session on a later attempt that succeeds")
     func endsOnARetryThatSucceeds() {
         let session = makeSession()
-        session.begin(makeHalfHour())
+        #expect(session.begin(makeHalfHour()))
         session.end { false }
 
         let didEnd = session.end { true }
@@ -79,7 +79,7 @@ struct CappedSessionTests {
     @Test("Disarms the expiry check once the work that ends the session succeeds")
     func disarmsTheCheckWhenEndingSucceeds() {
         let session = makeSession()
-        session.begin(makeHalfHour())
+        #expect(session.begin(makeHalfHour()))
 
         let didEnd = session.end { true }
 
@@ -134,7 +134,7 @@ struct CappedSessionTests {
         let started = makeHalfHour()
 
         #expect(session.current == nil)
-        session.begin(started)
+        #expect(session.begin(started))
         #expect(session.current == started)
     }
 }

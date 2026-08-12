@@ -111,9 +111,10 @@ public final class KeepAwakeController: NSObject {
             )
             return
         }
-        // The re-check above happens before the authorization prompt, which runs
-        // a nested run loop and can let a second start reach this far. Asking
-        // the session itself is the only check that cannot be overtaken.
+        // Every re-check above happens before the authorization prompt, and the
+        // prompt is not guaranteed to keep other work off the main queue while
+        // it is up. Asking the session itself is the only check that cannot be
+        // overtaken, whether or not anything currently overtakes it.
         guard cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration)) else {
             WardLogger.keepAwake.notice("Ignoring a stale start — a session began while this one was authorizing.")
             return

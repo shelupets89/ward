@@ -13,16 +13,18 @@ import Foundation
 /// `RunLoop.main` always fires on the main thread, so asserting that isolation
 /// is correct rather than a workaround.
 ///
-/// `onTick` is retained for the timer's lifetime, so a controller that owns its
+/// `onTick` is retained for the timer's lifetime, so whatever owns an
 /// `ExpiryTimer` must capture itself weakly in the closure.
 ///
-/// Not `public`: `CappedSession` is the only caller, so anything wider was
-/// surface and nothing else. That narrows the blast radius but does not by
-/// itself stop a feature from disarming early — a bare `Foundation.Timer` is
-/// always within reach, and debug builds pass `-enable-testing` to every
-/// target, so `@testable import` reaches this too. What actually keeps the bug
-/// from being re-expressible is that neither controller holds a timer-shaped
-/// property at all.
+/// Not `public`: `CappedSession` is the only caller. That does not by itself
+/// stop a feature from disarming early — a bare `Foundation.Timer` is always
+/// within reach. What keeps the bug from being re-expressible is that neither
+/// controller holds a timer-shaped property at all.
+///
+/// There is deliberately no `deinit` invalidating the timer. It could only run
+/// at process exit, where it is moot, and firing on a live session it would
+/// disarm the check while restoring nothing — the ordering bug `CappedSession`
+/// exists to prevent. It is also a Swift 6 language-mode error.
 @MainActor
 final class ExpiryTimer {
     private let interval: TimeInterval

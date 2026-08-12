@@ -60,8 +60,11 @@ public final class KeepScreenAwakeController: NSObject {
             presentAssertionFailedAlert()
             return
         }
+        // Nothing on the way here suspends, so unlike the lid-closed feature
+        // this cannot currently refuse. Handled rather than discarded because
+        // the alternative is logging a start that did not happen.
         guard cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration)) else {
-            WardLogger.keepScreenAwake.notice("Ignoring a start that lost to a session already running.")
+            WardLogger.keepScreenAwake.notice("Ignoring a start that found a session already running.")
             return
         }
         WardLogger.keepScreenAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")

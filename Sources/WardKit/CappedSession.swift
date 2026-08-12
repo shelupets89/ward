@@ -22,6 +22,9 @@ public final class CappedSession {
     public private(set) var current: KeepAwakeSession?
 
     public init(expiryCheckInterval: TimeInterval, onExpiry: @escaping @MainActor () -> Void) {
+        // A non-positive interval makes the check fire continuously rather than
+        // not at all, so it burns the main thread the session runs on.
+        precondition(expiryCheckInterval > 0, "expiryCheckInterval must be positive")
         expiryTimer = ExpiryTimer(interval: expiryCheckInterval, onTick: onExpiry)
     }
 
@@ -35,19 +38,14 @@ public final class CappedSession {
     /// Starts a session and arms the check that will end it, reporting whether
     /// it did.
     ///
-    /// A session already running is kept rather than replaced, because
-    /// replacing would restart the cap from now — and this type is shared with
-    /// a feature where the cap is the safety feature rather than a
-    /// convenience, so the conservative direction has to be the default one.
-    /// Returning the outcome is what keeps that from being a decision made on
-    /// the caller's behalf in silence: an owner that wanted the new session is
-    /// told it did not get it, and can say so rather than announcing a start
-    /// that never happened.
+    /// A session already running is kept rather than replaced — replacing would
+    /// restart the cap from now, and this type backs a feature where the cap is
+    /// the safety feature, not a convenience. The result exists so a caller that
+    /// lost is told so, rather than announcing a start that never happened.
     ///
-    /// Deliberately not a `precondition`: trapping here would kill a process
-    /// that is holding a setting outliving it, stranding the exact state this
-    /// type exists to bound.
-    @discardableResult
+    /// Deliberately not a `precondition`: this runs after the caller has already
+    /// changed system state, so trapping would strand exactly what this type
+    /// exists to bound.
     public func begin(_ session: KeepAwakeSession) -> Bool {
         guard current == nil else {
             return false
