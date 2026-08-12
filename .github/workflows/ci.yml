@@ -118,6 +118,14 @@ jobs:
       # build sandbox, so nothing short of a real `brew install` would catch it
       # coming back. Pointed at this commit rather than the last release,
       # because the last release is not what the PR changed.
+      #
+      # This overwrites the formula the two steps above audited, which is why it
+      # renders through the same script rather than an inline `sed`: otherwise
+      # the file being installed is produced by a second implementation of the
+      # substitution, carrying neither the placeholder guard nor the check that
+      # the render is the template plus exactly two filled-in lines. The bodies
+      # matched, so the divergence would have been silent — a stray `__X__`
+      # inside a Ruby string installs and tests perfectly.
       - name: Prove this commit installs through Homebrew
         run: |
           # Named ward-<version>.tar.gz so Homebrew infers the version the same
@@ -126,10 +134,8 @@ jobs:
           VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Support/Info.plist)"
           TARBALL="${RUNNER_TEMP}/ward-${VERSION}.tar.gz"
           git archive --format=tar.gz --prefix="ward-${VERSION}/" -o "${TARBALL}" HEAD
-          sed -e "s|__URL__|file://${TARBALL}|" \
-              -e "s|__SHA256__|$(shasum -a 256 "${TARBALL}" | awk '{print $1}')|" \
-              packaging/homebrew/ward.rb.template \
-              > "$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
+          bash scripts/render-formula.sh --local-tarball "${TARBALL}" \
+            "$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
           brew install --build-from-source shelupets89/ward/ward
           brew test shelupets89/ward/ward
 
