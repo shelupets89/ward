@@ -20,8 +20,8 @@ struct CappedSessionTests {
     /// mid-test would only make them nondeterministic.
     private static let neverFiresWithinATest: TimeInterval = 3600
 
-    private func makeSession(onExpiry: @escaping @MainActor () -> Void = {}) -> CappedSession {
-        return CappedSession(expiryCheckInterval: Self.neverFiresWithinATest, onExpiry: onExpiry)
+    private func makeSession() -> CappedSession {
+        return CappedSession(expiryCheckInterval: Self.neverFiresWithinATest, onExpiry: {})
     }
 
     private func makeHalfHour() -> KeepAwakeSession {
@@ -36,8 +36,8 @@ struct CappedSessionTests {
         #expect(session.current != nil)
     }
 
-    /// The regression test. Swap the two steps in `end(by:)` and this is the
-    /// case that goes red.
+    /// The regression test. Hoisting `expiryTimer.stop()` above the guard in
+    /// `end(by:)` — the exact shape that shipped — fails here and nowhere else.
     @Test("Leaves the expiry check armed when the work that ends the session fails")
     func keepsTheCheckArmedWhenEndingFails() {
         let session = makeSession()
@@ -87,9 +87,10 @@ struct CappedSessionTests {
         #expect(session.isExpiryCheckScheduled == false)
     }
 
-    /// An owner that has nothing running must not be made to release something
-    /// it never took — for Keep Screen Awake that would drop an assertion
-    /// belonging to another feature.
+    /// The floor under an owner that forgot to check: the ending work never
+    /// runs with no session to end. Both of today's owners would survive it if
+    /// it did — `DisplaySleepPreventer` no-ops when it holds nothing — so this
+    /// guards the next one, whose release may not be idempotent.
     @Test("Never runs the ending work when no session is running")
     func doesNotRunTheEndingWorkWithoutASession() {
         let session = makeSession()
@@ -103,6 +104,20 @@ struct CappedSessionTests {
         #expect(didEnd)
         #expect(didRunEndingWork == false)
         #expect(session.isExpiryCheckScheduled == false)
+    }
+
+    /// Replacing would restart the cap from now. For the lid-closed feature the
+    /// cap is the safety feature, so a second `begin` silently buying another
+    /// eight hours is the outcome worth refusing.
+    @Test("Keeps the running session rather than letting a second begin restart its cap")
+    func refusesToRestartTheCapOfARunningSession() {
+        let session = makeSession()
+        let started = makeHalfHour()
+        session.begin(started)
+
+        session.begin(KeepAwakeSession(startedAt: .now, duration: .seconds(8 * 3600)))
+
+        #expect(session.current == started)
     }
 
     @Test("Reports the session it was given, for as long as it is running")

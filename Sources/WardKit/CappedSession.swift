@@ -26,12 +26,27 @@ public final class CappedSession {
     }
 
     /// Whether the expiry check is still armed. A running session while this is
-    /// false is precisely the stranded state this type exists to prevent.
-    public var isExpiryCheckScheduled: Bool {
+    /// false is precisely the stranded state this type exists to prevent, and
+    /// asserting on it is how the tests hold that ordering in place.
+    var isExpiryCheckScheduled: Bool {
         return expiryTimer.isScheduled
     }
 
+    /// Starts a session and arms the check that will end it.
+    ///
+    /// A session already running is kept rather than replaced. Replacing would
+    /// restart the cap from now, and for the lid-closed feature the cap *is*
+    /// the safety feature — silently extending it is the failure worth
+    /// refusing. This is the mirror of `end(by:)` declining to release what was
+    /// never taken, and the floor under callers that check `current` first.
+    ///
+    /// Deliberately not a `precondition`: trapping here would kill a process
+    /// that is holding a setting outliving it, stranding the exact state this
+    /// type exists to bound.
     public func begin(_ session: KeepAwakeSession) {
+        guard current == nil else {
+            return
+        }
         current = session
         expiryTimer.start()
     }

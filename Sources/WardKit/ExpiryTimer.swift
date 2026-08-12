@@ -15,28 +15,32 @@ import Foundation
 ///
 /// `onTick` is retained for the timer's lifetime, so a controller that owns its
 /// `ExpiryTimer` must capture itself weakly in the closure.
+///
+/// Deliberately not `public`. `CappedSession` is the only thing that may own
+/// one, and keeping this inside WardKit is what makes that true by compilation
+/// rather than by agreement: a feature target cannot build a second timer to
+/// disarm ahead of the restore, which is the bug the pair exists to prevent.
 @MainActor
-public final class ExpiryTimer {
+final class ExpiryTimer {
     private let interval: TimeInterval
     private let onTick: @MainActor () -> Void
     private var scheduledTimer: Timer?
 
-    public init(interval: TimeInterval, onTick: @escaping @MainActor () -> Void) {
+    init(interval: TimeInterval, onTick: @escaping @MainActor () -> Void) {
         self.interval = interval
         self.onTick = onTick
     }
 
     /// Whether the check is currently armed.
     ///
-    /// Nothing in the app asks this — a capped session is the only thing that
-    /// starts or stops a timer, and it already knows. It exists so that "the
-    /// safety net is still running" is something a test can assert, which for
-    /// `CappedSession.end(by:)` is the whole property under test.
-    public var isScheduled: Bool {
+    /// Read by `CappedSession`, and through it by the tests that hold the
+    /// restore-before-disarm ordering in place: that a failed end leaves this
+    /// `true` is the whole property under test. Nothing in the app itself asks.
+    var isScheduled: Bool {
         return scheduledTimer != nil
     }
 
-    public func start() {
+    func start() {
         stop()
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -47,8 +51,15 @@ public final class ExpiryTimer {
         scheduledTimer = timer
     }
 
-    public func stop() {
+    func stop() {
         scheduledTimer?.invalidate()
         scheduledTimer = nil
+    }
+
+    /// `RunLoop.main` holds the scheduled timer, so an abandoned `ExpiryTimer`
+    /// would otherwise leave one firing into a `[weak self]` that is already
+    /// gone — harmless, but it never stops.
+    deinit {
+        scheduledTimer?.invalidate()
     }
 }
