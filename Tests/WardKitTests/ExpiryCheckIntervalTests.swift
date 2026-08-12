@@ -34,11 +34,30 @@ struct ExpiryCheckIntervalTests {
         #expect(ExpiryCheckInterval.clamped(interval) == interval)
     }
 
-    @Test("Never returns something a Timer would spin on")
-    func neverReturnsASpinningInterval() {
-        let awkwardInputs: [TimeInterval] = [-.greatestFiniteMagnitude, -1, 0, .leastNonzeroMagnitude, 0.5]
+    /// `nan` is the input `max` cannot hold, since every comparison against it
+    /// is false — it would come straight back out and reach `Timer` unclamped.
+    @Test("Holds a nan interval up to the floor rather than passing it through")
+    func clampsNotANumber() {
+        #expect(ExpiryCheckInterval.clamped(.nan) == ExpiryCheckInterval.shortest)
+    }
+
+    /// An infinite interval is the failure the other direction: a check that
+    /// never fires at all, on a session whose cap it exists to enforce.
+    @Test("Holds an infinite interval down to the floor", arguments: [TimeInterval.infinity, -.infinity])
+    func clampsInfinite(interval: TimeInterval) {
+        #expect(ExpiryCheckInterval.clamped(interval) == ExpiryCheckInterval.shortest)
+    }
+
+    @Test("Never returns something a Timer would spin on, or never fire on")
+    func neverReturnsAnUnusableInterval() {
+        let awkwardInputs: [TimeInterval] = [
+            -.greatestFiniteMagnitude, -1, 0, .leastNonzeroMagnitude, 0.5,
+            .nan, .infinity, -.infinity, .signalingNaN
+        ]
         for input in awkwardInputs {
-            #expect(ExpiryCheckInterval.clamped(input) >= ExpiryCheckInterval.shortest)
+            let clamped = ExpiryCheckInterval.clamped(input)
+            #expect(clamped.isFinite)
+            #expect(clamped >= ExpiryCheckInterval.shortest)
         }
     }
 }

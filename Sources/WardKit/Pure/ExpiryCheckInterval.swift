@@ -2,24 +2,29 @@ import Foundation
 
 /// How often a capped session re-asks whether it has expired.
 ///
-/// `Timer` does not read a non-positive interval as "never fire" — it coerces
-/// it to a fraction of a millisecond and spins, measured at roughly 7,500 ticks
-/// a second. On the lid-closed feature every tick past expiry spawns a `pmset`
-/// subprocess, so an interval that is merely wrong becomes an unresponsive Mac.
+/// There is a floor because `Timer` does not read a non-positive interval as
+/// "never fire" — it coerces it to a fraction of a millisecond and spins, and
+/// every tick past expiry attempts a privileged restore.
 ///
-/// Neither a trap nor an assert catches that where it matters: `precondition`
-/// fires in release too, where owners build their session during launch — ahead
-/// of the leak check — so on a Mac still carrying a setting a crash left behind,
-/// it would kill the only thing that would offer to clear it. And `assert` is
-/// stripped from exactly the builds that ship, including the `.app` this repo
-/// says to launch instead of `swift run`. So the floor is applied rather than
-/// asserted, and the assert is left as the developer-time signal on top of it.
+/// It is applied rather than checked because neither kind of check reaches
+/// where it matters. `precondition` also fires in release, where owners build
+/// their session during launch, ahead of the leak check — so on a Mac still
+/// carrying a setting a crash left behind, it would kill the only thing that
+/// would offer to clear it. And `assert` is stripped from the builds that ship.
 public enum ExpiryCheckInterval {
-    /// A session cap is measured in minutes at least, so re-asking more than
-    /// once a second buys nothing and costs a wakeup.
+    /// Every cap the menu offers is half an hour or more, so re-asking more
+    /// often than this buys nothing.
     public static let shortest: TimeInterval = 1
 
+    /// Non-finite intervals are held to the floor rather than passed on. `max`
+    /// cannot do it: every comparison against `nan` is false, so `nan` would
+    /// come straight back out. And an infinite interval is the worse of the two
+    /// — a check that never fires at all, on a session whose cap is the thing
+    /// the check exists to enforce.
     public static func clamped(_ requested: TimeInterval) -> TimeInterval {
+        guard requested.isFinite else {
+            return shortest
+        }
         return max(requested, shortest)
     }
 }

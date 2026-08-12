@@ -22,8 +22,10 @@ public final class CappedSession {
     public private(set) var current: KeepAwakeSession?
 
     public init(expiryCheckInterval: TimeInterval, onExpiry: @escaping @MainActor () -> Void) {
-        // The floor is what actually holds in a shipped build; see
-        // `ExpiryCheckInterval`. This is the developer-time signal on top of it.
+        // `ExpiryCheckInterval` is what actually holds the interval usable. This
+        // only speaks up in a debug build that constructs one badly, which no
+        // path here currently does — it is a signal for the next caller, not a
+        // guard this one relies on.
         assert(expiryCheckInterval > 0, "expiryCheckInterval must be positive")
         expiryTimer = ExpiryTimer(
             interval: ExpiryCheckInterval.clamped(expiryCheckInterval),

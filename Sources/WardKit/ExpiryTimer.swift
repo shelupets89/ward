@@ -47,10 +47,10 @@ final class ExpiryTimer {
 
     /// How many times the check has been armed.
     ///
-    /// `isScheduled` cannot tell "left alone" from "stopped and replaced" —
-    /// `start()` does both, and leaves a timer either side. This can, which is
-    /// what lets a test pin that refusing to start a session does not quietly
-    /// restart the running one's check and push its next poll back.
+    /// `start()` always replaces, so `isScheduled` reads the same whether a
+    /// check was restarted or never touched. This tells them apart, which is
+    /// what lets a test pin that a refused start leaves the running session's
+    /// next poll where it was.
     private(set) var timesArmed = 0
 
     func start() {
