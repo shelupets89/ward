@@ -104,8 +104,12 @@ jobs:
       #
       # A local tarball is still a real tarball with a real checksum, which is
       # what the audit needs. `brew style` and `brew audit --strict --online`
-      # both accept a file:// url — verified — and the release url is audited
-      # against the real tag by release.yml, at the point where it is published.
+      # both accept a file:// url — verified. What that leaves unaudited here is
+      # the real https release url; auditing it belongs where it is published,
+      # and update-tap in release.yml gains exactly that (issue #29 finding 2).
+      # Until that lands, no job audits a real release url — which is the state
+      # this repo was already in, since the render that used to carry one was
+      # overwritten before anything installed it.
       - name: Render the formula for this commit
         run: |
           # Named ward-<version>.tar.gz so Homebrew infers the version the same
@@ -153,3 +157,15 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck
           shellcheck --severity=warning scripts/*.sh
+
+      # The formula job proves render-formula.sh accepts a good tarball; nothing
+      # there can prove it still *rejects* a bad one, because a job that has to
+      # reach `brew install` can only ever feed it valid input. A guard that
+      # quietly stopped guarding would leave every check green — which is the
+      # failure this whole area was fixed for, one level up.
+      #
+      # On Linux deliberately: it needs no Homebrew, it keeps the macOS runners
+      # for the things that genuinely need them, and it holds the script to the
+      # portability its own mktemp comment claims.
+      - name: render-formula.sh guards
+        run: bash scripts/render-formula-tests.sh

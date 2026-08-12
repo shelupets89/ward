@@ -20,9 +20,16 @@ EOF
     exit 2
 }
 
+# MODE is what the caller asked for, recorded once. Deciding it here and then
+# re-deriving it further down from `[ -n "${LOCAL_TARBALL}" ]` would let the two
+# disagree: `--local-tarball ""` would take this branch and then fall into the
+# tag branch below, fetching whatever TAG happened to be in the environment —
+# and release.yml exports one.
+MODE=tag
 LOCAL_TARBALL=""
 if [ "${1:-}" = "--local-tarball" ]; then
     [ "$#" -eq 3 ] || usage
+    MODE=local
     LOCAL_TARBALL="$2"
     OUTPUT_PATH="$3"
 else
@@ -35,7 +42,7 @@ cd "$(dirname "$0")/.."
 
 TEMPLATE="packaging/homebrew/ward.rb.template"
 
-if [ -n "${LOCAL_TARBALL}" ]; then
+if [ "${MODE}" = local ]; then
     # Screened before the file is looked for, like the tag below: a malformed
     # argument is wrong whatever the filesystem says. Same reason as the tag,
     # plus one worse case — `&` on sed's replacement side expands to the whole
@@ -98,8 +105,12 @@ echo "sha256: ${SHA256}"
 # which would read here as "no LICENSE" and fail a release that is perfectly
 # fine. Only bites once the listing outgrows the pipe buffer, so it would
 # survive every tarball this project has today.
+# Anchored to the archive's one top-level directory, which both sources add —
+# `git archive --prefix=` here, and GitHub's own convention for a tag tarball.
+# A bare `/LICENSE$` would also accept a nested `ThirdParty/LICENSE` while the
+# root one was missing, and it is the root one make-app.sh copies.
 TARBALL_CONTENTS="$(tar tzf "${TARBALL}")"
-if ! grep -q '/LICENSE$' <<< "${TARBALL_CONTENTS}"; then
+if ! grep -q '^[^/]*/LICENSE$' <<< "${TARBALL_CONTENTS}"; then
     echo "error: ${TARBALL_URL} contains no LICENSE, but ${TEMPLATE} claims one" >&2
     exit 1
 fi
@@ -116,19 +127,29 @@ fi
 # manages — `grep -q` over `: > empty.rb` exits 1, so truncation, a failed write
 # or the wrong template all passed it and the script still printed "Wrote".
 #
-# Putting the placeholders back has to reproduce the template byte for byte.
-# That says what the render *is* rather than what it lacks, and it covers every
-# line added to the template later — the license stanza included — for free.
-# Both checks earn their place: this one is blind to a render where the
-# substitution never happened, since that restores to the template trivially.
+# So the render is derived a second time and compared byte for byte. What lands
+# on disk has to be the template with exactly these two lines filled in, which
+# says what the render *is* rather than what it lacks, and covers every line
+# added to the template later — the license stanza included — for free.
+#
+# Two things this deliberately does not do. It does not substitute the
+# placeholders back: that would put TARBALL_URL on sed's *pattern* side, where
+# its dots match any character, so a corruption landing on a dot would restore
+# cleanly and pass. And it compares with `cmp` rather than two `$(…)` strings,
+# because command substitution strips trailing newlines from both sides, which
+# would make "byte for byte" untrue of exactly the bytes at the end.
+#
+# The placeholder grep above still earns its place: this check is blind to a
+# placeholder the template itself left behind, since the second derivation
+# reproduces it too.
 if [ ! -s "${OUTPUT_PATH}" ]; then
     echo "error: ${OUTPUT_PATH} is empty — nothing was rendered" >&2
     exit 1
 fi
 
-RESTORED="$(sed -e "s|${TARBALL_URL}|__URL__|" -e "s|${SHA256}|__SHA256__|" "${OUTPUT_PATH}")"
-if [ "${RESTORED}" != "$(cat "${TEMPLATE}")" ]; then
-    echo "error: ${OUTPUT_PATH} differs from ${TEMPLATE} beyond the url and sha256 lines" >&2
+if ! cmp -s "${OUTPUT_PATH}" \
+    <(sed -e "s|__URL__|${TARBALL_URL}|" -e "s|__SHA256__|${SHA256}|" "${TEMPLATE}"); then
+    echo "error: ${OUTPUT_PATH} is not ${TEMPLATE} with only the url and sha256 filled in" >&2
     exit 1
 fi
 
