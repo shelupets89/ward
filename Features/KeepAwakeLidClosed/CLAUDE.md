@@ -5,7 +5,7 @@
 ## Invariants
 
 - **Never remove the session cap.** 8 hours is the maximum and there is deliberately no unlimited option. The cap is the safety feature, not a limitation.
-- **Never tear down the expiry timer before the restore succeeds.** A failed restore must keep retrying; killing the timer first strands the session with its safety net dead. This bug shipped once and was caught by three independent reviewers.
+- **Never tear down the expiry timer before the restore succeeds.** A failed restore must keep retrying; killing the timer first strands the session with its safety net dead. This bug shipped once and was caught by three independent reviewers. It now lives in `CappedSession.end(by:)` (WardKit), which is *handed* the restore rather than told how it went — so this controller owns no timer it could stop early, and `CappedSessionTests` goes red if the two steps are swapped back. That is a test of the ordering, not of the decision; a decision test stays green through this exact bug.
 - **`menuState` re-reads the live flag.** Never derive "off" from `session == nil` alone — a crash leaves the flag set with no session owning it.
 - **A failed *read* is `.unknown`, not `.enabled`.** Treat unknown as possibly-disabled, or the leak check silently skips the exact condition it exists to catch.
 - **Never write `/etc/sudoers.d` without `visudo -c` on the staged file.** An invalid file there breaks `sudo` machine-wide.
@@ -22,4 +22,4 @@
 
 `Sources/Pure/` — `SleepSettingsParser`, `SudoersRule`. Both fully tested; `SudoersRule` builds a command that runs as root, so treat changes there as security-sensitive.
 
-`Sources/` — `LidSleepSetting` (chooses arguments), `SudoersRuleInstaller` (first-run setup), `KeepAwakeController` (session, expiry, leak recovery, quit gate).
+`Sources/` — `LidSleepSetting` (chooses arguments), `SudoersRuleInstaller` (first-run setup), `KeepAwakeController` (leak recovery, quit gate, and the Touch ID gate; the session and its expiry check belong to a `CappedSession` from WardKit).

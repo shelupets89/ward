@@ -16,7 +16,7 @@ Getting this wrong is the worst bug this codebase can have: a fail-closed featur
 ## Structure
 
 ```
-Sources/WardKit/                shared glue: logging, process, privileged exec, permissions, WardFeature
+Sources/WardKit/                shared glue: logging, process, privileged exec, permissions, WardFeature, CappedSession
 Sources/WardKit/Pure/           shared pure logic
 Features/<Name>/Sources/        feature glue
 Features/<Name>/Sources/Pure/   feature pure logic  ← the coverage gate measures these

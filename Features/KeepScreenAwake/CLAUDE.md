@@ -17,4 +17,6 @@
 
 `Sources/Pure/` — menu-state derivation only.
 
-`Sources/` — controller wrapping `DisplaySleepPreventer` + `KeepAwakeSession`, and the `WardFeature` conformance.
+`Sources/` — controller wrapping `DisplaySleepPreventer` + a `CappedSession` from WardKit, and the `WardFeature` conformance.
+
+Sharing `CappedSession` with the lid-closed feature is reuse of a WardKit primitive, not the merge the invariant above forbids: it holds a session and its expiry check — both of which this feature already had — and none of the fail-closed recovery machinery. What it does carry across is the ordering rule, that the release runs before the session is forgotten.

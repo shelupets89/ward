@@ -26,6 +26,16 @@ public final class ExpiryTimer {
         self.onTick = onTick
     }
 
+    /// Whether the check is currently armed.
+    ///
+    /// Nothing in the app asks this — a capped session is the only thing that
+    /// starts or stops a timer, and it already knows. It exists so that "the
+    /// safety net is still running" is something a test can assert, which for
+    /// `CappedSession.end(by:)` is the whole property under test.
+    public var isScheduled: Bool {
+        return scheduledTimer != nil
+    }
+
     public func start() {
         stop()
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
