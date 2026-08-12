@@ -4,7 +4,8 @@ import Foundation
 ///
 /// There is a floor because `Timer` does not read a non-positive interval as
 /// "never fire" — it coerces it to a fraction of a millisecond and spins, and
-/// every tick past expiry attempts a privileged restore.
+/// every tick past expiry tries to end the session, at whatever that costs the
+/// owner doing the ending.
 ///
 /// It is applied rather than checked because neither kind of check reaches
 /// where it matters. `precondition` also fires in release, where owners build
