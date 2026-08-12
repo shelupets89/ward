@@ -22,16 +22,13 @@ public final class CappedSession {
     public private(set) var current: KeepAwakeSession?
 
     public init(expiryCheckInterval: TimeInterval, onExpiry: @escaping @MainActor () -> Void) {
-        // A non-positive interval makes the check fire continuously rather than
-        // not at all, so it burns the main thread the session runs on.
-        //
-        // `assert`, not `precondition` as `KeepAwakeSession` uses: this is a
-        // developer constant at every call site, and both owners construct
-        // lazily, so in a release build the trap could only ever fire on a Mac
-        // that already has sleep disabled — killing the process that was about
-        // to offer to restore it.
+        // The floor is what actually holds in a shipped build; see
+        // `ExpiryCheckInterval`. This is the developer-time signal on top of it.
         assert(expiryCheckInterval > 0, "expiryCheckInterval must be positive")
-        expiryTimer = ExpiryTimer(interval: expiryCheckInterval, onTick: onExpiry)
+        expiryTimer = ExpiryTimer(
+            interval: ExpiryCheckInterval.clamped(expiryCheckInterval),
+            onTick: onExpiry
+        )
     }
 
     /// Whether the expiry check is still armed. A running session while this is
