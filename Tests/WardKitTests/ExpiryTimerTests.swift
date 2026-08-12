@@ -10,6 +10,7 @@ import Testing
 /// Isolated to the main actor because `ExpiryTimer` is: its check is a `Timer`
 /// on `RunLoop.main`.
 @MainActor
+@Suite(.serialized)
 struct ExpiryTimerTests {
     /// Long enough that the check cannot fire during a test. These cases assert
     /// on arming, never on ticking.
@@ -46,6 +47,34 @@ struct ExpiryTimerTests {
         timer.stop()
 
         #expect(timer.timesArmed == 1)
+    }
+
+    /// The only case here that lets a timer actually fire, and the only one that
+    /// would notice `repeats:` becoming false. That matters most for the
+    /// lid-closed feature, where the tick is the *only* thing that reaches the
+    /// expiry sweep — nothing re-checks on a menu open — so a check that fired
+    /// once and stopped would leave the setting on with nothing coming back for
+    /// it.
+    ///
+    /// Bounded by a `ContinuousClock` deadline and returns the moment it has
+    /// seen enough, so the cost is a few milliseconds unless it is failing.
+    /// `CFRunLoopRunInMode` rather than `RunLoop.run(until:)` because that one
+    /// wants a `Date`, which is not what this repo measures time with.
+    @Test("Keeps checking, rather than firing once and stopping")
+    func keepsCheckingRatherThanFiringOnce() {
+        var tickCount = 0
+        let timer = ExpiryTimer(interval: 0.02) {
+            tickCount += 1
+        }
+        timer.start()
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while tickCount < 2, ContinuousClock.now < deadline {
+            CFRunLoopRunInMode(.defaultMode, 0.01, true)
+        }
+        timer.stop()
+
+        #expect(tickCount >= 2, "a one-shot check stops after its first tick and never comes back")
     }
 
     @Test("Arms and disarms the check")
