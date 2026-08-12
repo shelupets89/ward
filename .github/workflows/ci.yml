@@ -89,17 +89,35 @@ jobs:
       - uses: actions/checkout@v4
 
       # The tap's formula is rendered, never hand-edited, so what needs guarding
-      # is that the template still renders to something Homebrew accepts. It is
-      # rendered against the newest release because only a real tarball produces
-      # a real checksum — a placeholder would make the audit meaningless.
-      - name: Render the formula for the latest release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # is that the template still renders to something Homebrew accepts, builds,
+      # and passes its own test. One render, audited and installed, so those are
+      # claims about the same bytes: this job used to render twice — once for the
+      # audit, then an inline `sed` that overwrote it for the install — so it
+      # proved two different files and neither claim covered the other.
+      #
+      # Rendered from this commit rather than the newest release, because the
+      # template describes the tree beside it. Since it began requiring a LICENSE
+      # in the bundle, pairing it with an older tarball produces a formula that
+      # styles and audits clean and then fails its own `brew test` — v0.2.0
+      # predates LICENSE, so that pairing is not hypothetical. render-formula.sh
+      # now refuses it outright rather than rendering it.
+      #
+      # A local tarball is still a real tarball with a real checksum, which is
+      # what the audit needs. `brew style` and `brew audit --strict --online`
+      # both accept a file:// url — verified. What that leaves unaudited here is
+      # the real https release url, and auditing it belongs where it is
+      # published: update-tap in release.yml now styles and audits the formula
+      # it is about to push to the tap.
+      - name: Render the formula for this commit
         run: |
-          LATEST_TAG="$(gh release view --json tagName --jq .tagName)"
-          echo "Rendering against ${LATEST_TAG}"
+          # Named ward-<version>.tar.gz so Homebrew infers the version the same
+          # way it does from a release tarball, which also lets the formula's
+          # own test compare it against Info.plist.
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Support/Info.plist)"
+          TARBALL="${RUNNER_TEMP}/ward-${VERSION}.tar.gz"
+          git archive --format=tar.gz --prefix="ward-${VERSION}/" -o "${TARBALL}" HEAD
           brew tap-new shelupets89/ward --no-git
-          bash scripts/render-formula.sh "${LATEST_TAG}" \
+          bash scripts/render-formula.sh --local-tarball "${TARBALL}" \
             "$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
 
       - name: brew style
@@ -116,20 +134,9 @@ jobs:
       # The distinction is not academic — the nested-sandbox failure this
       # packaging exists to work around reproduces *only* inside Homebrew's
       # build sandbox, so nothing short of a real `brew install` would catch it
-      # coming back. Pointed at this commit rather than the last release,
-      # because the last release is not what the PR changed.
+      # coming back.
       - name: Prove this commit installs through Homebrew
         run: |
-          # Named ward-<version>.tar.gz so Homebrew infers the version the same
-          # way it does from a release tarball, which also lets the formula's
-          # own test compare it against Info.plist.
-          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Support/Info.plist)"
-          TARBALL="${RUNNER_TEMP}/ward-${VERSION}.tar.gz"
-          git archive --format=tar.gz --prefix="ward-${VERSION}/" -o "${TARBALL}" HEAD
-          sed -e "s|__URL__|file://${TARBALL}|" \
-              -e "s|__SHA256__|$(shasum -a 256 "${TARBALL}" | awk '{print $1}')|" \
-              packaging/homebrew/ward.rb.template \
-              > "$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/Formula/ward.rb"
           brew install --build-from-source shelupets89/ward/ward
           brew test shelupets89/ward/ward
 
@@ -148,3 +155,15 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck
           shellcheck --severity=warning scripts/*.sh
+
+      # The formula job proves render-formula.sh accepts a good tarball; nothing
+      # there can prove it still *rejects* a bad one, because a job that has to
+      # reach `brew install` can only ever feed it valid input. A guard that
+      # quietly stopped guarding would leave every check green — which is the
+      # failure this whole area was fixed for, one level up.
+      #
+      # On Linux deliberately: it needs no Homebrew, it keeps the macOS runners
+      # for the things that genuinely need them, and it holds the script to the
+      # portability its own mktemp comment claims.
+      - name: render-formula.sh guards
+        run: bash scripts/render-formula-tests.sh
