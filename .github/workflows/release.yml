@@ -12,15 +12,20 @@ on:
 permissions:
   contents: write
 
+# GITHUB_REF_NAME is set on a manual dispatch too — to the branch the run was
+# started from — so a `${GITHUB_REF_NAME:-inputs.tag}` fallback never reaches the
+# input, and the tag box is silently ignored.
+#
+# Declared once for the whole workflow rather than per job: both jobs need it,
+# and two copies of this expression are two places a future trigger change has to
+# be kept in step. Missing one would silently give that job the wrong ref.
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
 jobs:
   release:
     name: Build and publish
     runs-on: macos-15
-    # GITHUB_REF_NAME is set on a manual dispatch too — to the branch the run
-    # was started from — so a `${GITHUB_REF_NAME:-inputs.tag}` fallback never
-    # reaches the input, and the tag box is silently ignored.
-    env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       # `ref` for the same reason TAG is computed above: on a dispatch the branch
       # the run started from is not the tag being released, and everything below
@@ -120,23 +125,29 @@ jobs:
     permissions:
       contents: read
     env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+      # A tap is `owner/name`; its repository is `owner/homebrew-name`, and
+      # Homebrew checks it out under Library/Taps at the repository's own path.
+      # Both spellings are needed, so both are named once here — `brew style`
+      # takes the tap and reports "0 files inspected" with exit 0 when handed a
+      # tap that does not exist, so a literal drifting out of step with
+      # `brew tap-new` would silently retire this job's metadata gate.
+      TAP_NAME: shelupets89/ward
       TAP_REPO: shelupets89/homebrew-ward
       FORMULA_PATH: Formula/ward.rb
     steps:
-      # Without `ref` this takes github.ref — the branch a dispatch was started
-      # from — so render-formula.sh would read the template out of one commit
-      # while pinning `url` to a different commit's tarball. The formula body and
-      # the source it describes would come from two different trees, and every
-      # step below would still pass.
+      # Same reason as the release job's checkout above, but a different stake:
+      # here render-formula.sh reads the template out of the checked-out tree
+      # while building `url` from ${TAG} alone, so a wrong ref pins the formula
+      # body of one commit to another commit's tarball — and every step below
+      # still passes, because nothing else re-derives the template.
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
 
       - name: Render the formula for this tag
         run: |
-          brew tap-new shelupets89/ward --no-git
-          echo "RENDERED=$(brew --repository)/Library/Taps/shelupets89/homebrew-ward/${FORMULA_PATH}" >> "${GITHUB_ENV}"
+          brew tap-new "${TAP_NAME}" --no-git
+          echo "RENDERED=$(brew --repository)/Library/Taps/${TAP_REPO}/${FORMULA_PATH}" >> "${GITHUB_ENV}"
 
       - name: Fill in the tag's url and checksum
         run: bash scripts/render-formula.sh "${TAG}" "${RENDERED}"
@@ -150,22 +161,29 @@ jobs:
       # unreachable and no flag re-enables it: `license "MIT"` against a GPL repo
       # audits clean. Malformed metadata is caught here; wrong metadata is not.
       - name: brew style
-        run: brew style shelupets89/ward
+        run: brew style "${TAP_NAME}"
 
       # `--online` reaches the GitHub API, which rate-limits unauthenticated
       # runners hard enough to make this flaky without a token.
       - name: brew audit
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
-        run: brew audit --strict --online shelupets89/ward/ward
+        run: brew audit --strict --online "${TAP_NAME}/ward"
 
       # A formula is only as good as the install it produces, and the failure
       # mode this guards against is silent: the tap keeps serving a formula that
       # no longer builds. Testing before the push means a broken one never lands.
       - name: Prove the formula installs
         run: |
-          brew install --build-from-source shelupets89/ward/ward
-          brew test shelupets89/ward/ward
+          brew install --build-from-source "${TAP_NAME}/ward"
+          brew test "${TAP_NAME}/ward"
+          # Pinned here rather than recomputed at publish time, so "the formula
+          # that was tested" names these exact bytes and not whatever is on disk
+          # by the time the PUT runs. Without it a step added between here and
+          # the publish — `brew style --fix` is the obvious candidate, and it
+          # would sit two steps up — could rewrite the formula, and the publish
+          # would verify the rewrite against itself and pass.
+          echo "PROVEN_BLOB=$(git hash-object "${RENDERED}")" >> "${GITHUB_ENV}"
 
       - name: Nothing downloaded means nothing quarantined
         run: bash scripts/check-no-quarantine.sh "$(brew --prefix ward)/Ward.app"
@@ -191,17 +209,23 @@ jobs:
             exit 1
           fi
 
-          # No `shell:` key anywhere in this workflow, so the default is
-          # `bash -e {0}` and pipefail is off. Inline as `-f content="$(base64
-          # … | tr …)"` the pipeline reported `tr`'s status, which is always 0,
-          # and a failed command substitution used as an argument does not trip
-          # `set -e` either — an unreadable RENDERED would have PUT an empty
-          # body and printed a commit URL for a 0-byte formula on the live tap.
-          # Split so `set -e` sees base64's own status, with the newline strip
-          # done as a parameter expansion rather than a second pipe to hide one
-          # behind.
+          # This step sets no `shell:`, and neither does the job, so it runs
+          # under the Actions default of `bash -e {0}` — pipefail off, as the
+          # run log states verbatim. Inline as `-f content="$(base64 … | tr …)"`
+          # the pipeline reported `tr`'s status, which is always 0, and a failed
+          # command substitution used as an argument does not trip `set -e`
+          # either — an unreadable RENDERED would have PUT an empty body and
+          # printed a commit URL for a 0-byte formula on the live tap. Split so
+          # `set -e` sees base64's own status. macOS base64 does not wrap, but
+          # GNU base64 does, so the newline strip stays for a Linux runner —
+          # done as a parameter expansion rather than a second pipe to hide an
+          # error behind.
           if [ ! -s "${RENDERED}" ]; then
             echo "::error::${RENDERED} is empty or missing — refusing to publish it."
+            exit 1
+          fi
+          if [ "$(git hash-object "${RENDERED}")" != "${PROVEN_BLOB}" ]; then
+            echo "::error::${RENDERED} has changed since it was installed and tested — refusing to publish something nothing has proven."
             exit 1
           fi
           WRAPPED_CONTENT="$(base64 -i "${RENDERED}")"
@@ -217,11 +241,11 @@ jobs:
           # Any 2xx prints a commit URL whatever bytes it stored, so the URL on
           # its own is not evidence the tap serves what was tested here. The
           # response's blob id is git's hash of what the tap now holds, and
-          # `git hash-object` is that same function run locally, so comparing
-          # them is a byte-for-byte claim about the published file.
-          EXPECTED_BLOB="$(git hash-object "${RENDERED}")"
-          if [ "${PUBLISHED_BLOB}" != "${EXPECTED_BLOB}" ]; then
-            echo "::error::${TAP_REPO}/${FORMULA_PATH} is now blob ${PUBLISHED_BLOB}, but the formula proven above hashes to ${EXPECTED_BLOB} — the tap is not serving what was tested."
+          # PROVEN_BLOB is that same hash taken of the file `brew test` passed
+          # against — so equality is a byte-for-byte claim reaching back to the
+          # thing that was actually proven, not to the file as it stands now.
+          if [ "${PUBLISHED_BLOB}" != "${PROVEN_BLOB}" ]; then
+            echo "::error::${TAP_REPO}/${FORMULA_PATH} is now blob ${PUBLISHED_BLOB}, but the formula that was installed and tested is ${PROVEN_BLOB} — the tap is not serving what was proven."
             exit 1
           fi
 
