@@ -24,7 +24,13 @@ public final class CappedSession {
     public init(expiryCheckInterval: TimeInterval, onExpiry: @escaping @MainActor () -> Void) {
         // A non-positive interval makes the check fire continuously rather than
         // not at all, so it burns the main thread the session runs on.
-        precondition(expiryCheckInterval > 0, "expiryCheckInterval must be positive")
+        //
+        // `assert`, not `precondition` as `KeepAwakeSession` uses: this is a
+        // developer constant at every call site, and both owners construct
+        // lazily, so in a release build the trap could only ever fire on a Mac
+        // that already has sleep disabled — killing the process that was about
+        // to offer to restore it.
+        assert(expiryCheckInterval > 0, "expiryCheckInterval must be positive")
         expiryTimer = ExpiryTimer(interval: expiryCheckInterval, onTick: onExpiry)
     }
 
@@ -39,9 +45,10 @@ public final class CappedSession {
     /// it did.
     ///
     /// A session already running is kept rather than replaced — replacing would
-    /// restart the cap from now, and this type backs a feature where the cap is
-    /// the safety feature, not a convenience. The result exists so a caller that
-    /// lost is told so, rather than announcing a start that never happened.
+    /// restart the cap from now, and for one of the two features this backs the
+    /// cap is a safety feature rather than a convenience, so refusing has to be
+    /// the shared default. The result exists so a caller that lost is told so,
+    /// rather than announcing a start that never happened.
     ///
     /// Deliberately not a `precondition`: this runs after the caller has already
     /// changed system state, so trapping would strand exactly what this type
@@ -62,7 +69,6 @@ public final class CappedSession {
     ///
     /// Returns false only when `finish` did. `finish` is not run at all when
     /// there is no session, so an owner cannot release something it never took.
-    @discardableResult
     public func end(by finish: () -> Bool) -> Bool {
         guard current != nil else {
             return true

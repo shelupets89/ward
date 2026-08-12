@@ -123,11 +123,12 @@ public final class KeepAwakeController: NSObject {
         WardLogger.keepAwake.info("Keep-awake active for \(option.menuTitle, privacy: .public).")
     }
 
-    /// Returns false only on an explicit decline. The expiry check is left armed
-    /// on failure so it keeps retrying — a restore that failed once is exactly
-    /// when the safety net matters most. `CappedSession.end(by:)` is what holds
-    /// that ordering; this method cannot get it wrong because it has no timer of
-    /// its own to stop.
+    /// Returns false when the restore was declined *or* simply failed — expiry
+    /// passes `allowInteractivePrompt: false`, which without the sudoers rule
+    /// fails without ever asking. The expiry check is left armed either way, so
+    /// it keeps retrying; a restore that failed once is exactly when the safety
+    /// net matters most. `CappedSession.end(by:)` is what holds that ordering,
+    /// and this method has no timer of its own to get it wrong with.
     @discardableResult
     func stop(allowInteractivePrompt: Bool) -> Bool {
         guard cappedSession.current != nil else {

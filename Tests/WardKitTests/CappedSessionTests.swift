@@ -56,7 +56,7 @@ struct CappedSessionTests {
         let started = makeHalfHour()
         #expect(session.begin(started))
 
-        session.end { false }
+        #expect(session.end { false } == false)
 
         #expect(session.current == started)
     }
@@ -67,7 +67,7 @@ struct CappedSessionTests {
     func endsOnARetryThatSucceeds() {
         let session = makeSession()
         #expect(session.begin(makeHalfHour()))
-        session.end { false }
+        #expect(session.end { false } == false)
 
         let didEnd = session.end { true }
 
