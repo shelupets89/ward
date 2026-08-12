@@ -32,23 +32,29 @@ public final class CappedSession {
         return expiryTimer.isScheduled
     }
 
-    /// Starts a session and arms the check that will end it.
+    /// Starts a session and arms the check that will end it, reporting whether
+    /// it did.
     ///
-    /// A session already running is kept rather than replaced. Replacing would
-    /// restart the cap from now, and for the lid-closed feature the cap *is*
-    /// the safety feature — silently extending it is the failure worth
-    /// refusing. This is the mirror of `end(by:)` declining to release what was
-    /// never taken, and the floor under callers that check `current` first.
+    /// A session already running is kept rather than replaced, because
+    /// replacing would restart the cap from now — and this type is shared with
+    /// a feature where the cap is the safety feature rather than a
+    /// convenience, so the conservative direction has to be the default one.
+    /// Returning the outcome is what keeps that from being a decision made on
+    /// the caller's behalf in silence: an owner that wanted the new session is
+    /// told it did not get it, and can say so rather than announcing a start
+    /// that never happened.
     ///
     /// Deliberately not a `precondition`: trapping here would kill a process
     /// that is holding a setting outliving it, stranding the exact state this
     /// type exists to bound.
-    public func begin(_ session: KeepAwakeSession) {
+    @discardableResult
+    public func begin(_ session: KeepAwakeSession) -> Bool {
         guard current == nil else {
-            return
+            return false
         }
         current = session
         expiryTimer.start()
+        return true
     }
 
     /// Ends the session by running `finish`, and disarms the expiry check only

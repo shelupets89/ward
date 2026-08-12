@@ -16,10 +16,13 @@ import Foundation
 /// `onTick` is retained for the timer's lifetime, so a controller that owns its
 /// `ExpiryTimer` must capture itself weakly in the closure.
 ///
-/// Deliberately not `public`. `CappedSession` is the only thing that may own
-/// one, and keeping this inside WardKit is what makes that true by compilation
-/// rather than by agreement: a feature target cannot build a second timer to
-/// disarm ahead of the restore, which is the bug the pair exists to prevent.
+/// Not `public`: `CappedSession` is the only caller, so anything wider was
+/// surface and nothing else. That narrows the blast radius but does not by
+/// itself stop a feature from disarming early — a bare `Foundation.Timer` is
+/// always within reach, and debug builds pass `-enable-testing` to every
+/// target, so `@testable import` reaches this too. What actually keeps the bug
+/// from being re-expressible is that neither controller holds a timer-shaped
+/// property at all.
 @MainActor
 final class ExpiryTimer {
     private let interval: TimeInterval
@@ -54,12 +57,5 @@ final class ExpiryTimer {
     func stop() {
         scheduledTimer?.invalidate()
         scheduledTimer = nil
-    }
-
-    /// `RunLoop.main` holds the scheduled timer, so an abandoned `ExpiryTimer`
-    /// would otherwise leave one firing into a `[weak self]` that is already
-    /// gone — harmless, but it never stops.
-    deinit {
-        scheduledTimer?.invalidate()
     }
 }

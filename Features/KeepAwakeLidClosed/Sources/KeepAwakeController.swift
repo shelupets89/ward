@@ -111,7 +111,13 @@ public final class KeepAwakeController: NSObject {
             )
             return
         }
-        cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration))
+        // The re-check above happens before the authorization prompt, which runs
+        // a nested run loop and can let a second start reach this far. Asking
+        // the session itself is the only check that cannot be overtaken.
+        guard cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration)) else {
+            WardLogger.keepAwake.notice("Ignoring a stale start — a session began while this one was authorizing.")
+            return
+        }
         hasWarnedAboutFailedRestore = false
         WardLogger.keepAwake.info("Keep-awake active for \(option.menuTitle, privacy: .public).")
     }

@@ -37,7 +37,8 @@ struct CappedSessionTests {
     }
 
     /// The regression test. Hoisting `expiryTimer.stop()` above the guard in
-    /// `end(by:)` — the exact shape that shipped — fails here and nowhere else.
+    /// `end(by:)` is the exact shape that shipped, and this is the case that
+    /// catches it.
     @Test("Leaves the expiry check armed when the work that ends the session fails")
     func keepsTheCheckArmedWhenEndingFails() {
         let session = makeSession()
@@ -107,17 +108,24 @@ struct CappedSessionTests {
     }
 
     /// Replacing would restart the cap from now. For the lid-closed feature the
-    /// cap is the safety feature, so a second `begin` silently buying another
-    /// eight hours is the outcome worth refusing.
-    @Test("Keeps the running session rather than letting a second begin restart its cap")
+    /// cap is the safety feature, so a second `begin` buying another eight
+    /// hours is the outcome worth refusing — and saying it refused, so the
+    /// caller cannot announce a start that did not happen.
+    ///
+    /// The check has to survive the refusal too. Disarming it while keeping the
+    /// session would strand exactly what `end(by:)` is careful not to, reached
+    /// from the other end.
+    @Test("Keeps the running session, and its armed check, rather than letting a second begin restart the cap")
     func refusesToRestartTheCapOfARunningSession() {
         let session = makeSession()
         let started = makeHalfHour()
-        session.begin(started)
+        #expect(session.begin(started))
 
-        session.begin(KeepAwakeSession(startedAt: .now, duration: .seconds(8 * 3600)))
+        let didBeginAgain = session.begin(KeepAwakeSession(startedAt: .now, duration: .seconds(8 * 3600)))
 
+        #expect(didBeginAgain == false)
         #expect(session.current == started)
+        #expect(session.isExpiryCheckScheduled, "a refused start must not disarm the running session's check")
     }
 
     @Test("Reports the session it was given, for as long as it is running")

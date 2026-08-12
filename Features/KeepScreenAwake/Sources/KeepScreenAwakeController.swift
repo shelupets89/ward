@@ -60,7 +60,10 @@ public final class KeepScreenAwakeController: NSObject {
             presentAssertionFailedAlert()
             return
         }
-        cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration))
+        guard cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration)) else {
+            WardLogger.keepScreenAwake.notice("Ignoring a start that lost to a session already running.")
+            return
+        }
         WardLogger.keepScreenAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")
     }
 
