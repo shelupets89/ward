@@ -179,11 +179,15 @@ jobs:
           brew test "${TAP_NAME}/ward"
           # Pinned here rather than recomputed at publish time, so "the formula
           # that was tested" names these exact bytes and not whatever is on disk
-          # by the time the PUT runs. Without it a step added between here and
-          # the publish — `brew style --fix` is the obvious candidate, and it
-          # would sit two steps up — could rewrite the formula, and the publish
-          # would verify the rewrite against itself and pass.
-          echo "PROVEN_BLOB=$(git hash-object "${RENDERED}")" >> "${GITHUB_ENV}"
+          # by the time the PUT runs. Without it, anything added between this
+          # step and the publish that rewrote the formula — a `--fix` alongside
+          # the `brew style` step is the obvious candidate — would be verified
+          # against itself and pass.
+          # Assigned bare before it is echoed, for the same reason the publish
+          # step splits its base64: inside `echo "X=$(cmd)"` the substitution is
+          # an argument, so a failure would print `PROVEN_BLOB=` and carry on.
+          PROVEN_BLOB="$(git hash-object "${RENDERED}")"
+          echo "PROVEN_BLOB=${PROVEN_BLOB}" >> "${GITHUB_ENV}"
 
       - name: Nothing downloaded means nothing quarantined
         run: bash scripts/check-no-quarantine.sh "$(brew --prefix ward)/Ward.app"
