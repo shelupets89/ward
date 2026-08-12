@@ -22,8 +22,7 @@ public final class KeepAwakeController: NSObject {
         case unownedAndDisabled
     }
 
-    private var session: KeepAwakeSession?
-    private lazy var expiryTimer = ExpiryTimer(interval: Self.expiryCheckInterval) { [weak self] in
+    private lazy var cappedSession = CappedSession(expiryCheckInterval: Self.expiryCheckInterval) { [weak self] in
         self?.expireSessionIfElapsed()
     }
     private var isAwaitingConfirmation = false
@@ -68,14 +67,14 @@ public final class KeepAwakeController: NSObject {
     }
 
     var isHoldingSleepDisabled: Bool {
-        return session != nil
+        return cappedSession.current != nil
     }
 
     var menuState: MenuState {
         if isAwaitingConfirmation {
             return .awaitingConfirmation
         }
-        if let session {
+        if let session = cappedSession.current {
             return .active(remainingTime: RemainingTimeFormatting.formatHoursAndMinutes(session.remaining(at: .now)))
         }
         return LidSleepSetting.currentState.mayBeDisabled ? .unownedAndDisabled : .off
@@ -87,7 +86,7 @@ public final class KeepAwakeController: NSObject {
     /// The gate is skipped when the toggle would raise a password dialog anyway
     /// — two prompts for one action is worse than the one it already needs.
     func start(for option: KeepAwakeDuration) async {
-        guard session == nil, !isAwaitingConfirmation else {
+        guard cappedSession.current == nil, !isAwaitingConfirmation else {
             return
         }
         guard await confirmIntentIfPromptWouldBeTheOnlyOne(for: option) else {
@@ -96,7 +95,7 @@ public final class KeepAwakeController: NSObject {
         }
         // The confirmation above suspends; re-check rather than trusting the
         // state we validated before it.
-        guard session == nil else {
+        guard cappedSession.current == nil else {
             WardLogger.keepAwake.notice("Ignoring a stale start — a session already exists.")
             return
         }
@@ -112,26 +111,34 @@ public final class KeepAwakeController: NSObject {
             )
             return
         }
-        session = KeepAwakeSession(startedAt: .now, duration: option.duration)
+        // Every re-check above happens before the authorization prompt, and the
+        // prompt is not guaranteed to keep other work off the main queue while
+        // it is up. Asking the session itself is the only check that cannot be
+        // overtaken, whether or not anything currently overtakes it.
+        guard cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration)) else {
+            WardLogger.keepAwake.notice("Ignoring a stale start — a session began while this one was authorizing.")
+            return
+        }
         hasWarnedAboutFailedRestore = false
-        expiryTimer.start()
         WardLogger.keepAwake.info("Keep-awake active for \(option.menuTitle, privacy: .public).")
     }
 
-    /// Returns false only on an explicit decline. The expiry timer is left
-    /// running on failure so it keeps retrying — a restore that failed once is
-    /// exactly when the safety net matters most.
-    @discardableResult
+    /// Returns false when the restore was declined *or* simply failed — expiry
+    /// passes `allowInteractivePrompt: false`, which without the sudoers rule
+    /// fails without ever asking. The expiry check is left armed either way, so
+    /// it keeps retrying; a restore that failed once is exactly when the safety
+    /// net matters most. `CappedSession.end(by:)` is what holds that ordering,
+    /// and this method has no timer of its own to get it wrong with.
     func stop(allowInteractivePrompt: Bool) -> Bool {
-        guard session != nil else {
+        guard cappedSession.current != nil else {
             return true
         }
-        guard LidSleepSetting.enableSleep(allowInteractivePrompt: allowInteractivePrompt) else {
+        guard cappedSession.end(by: {
+            LidSleepSetting.enableSleep(allowInteractivePrompt: allowInteractivePrompt)
+        }) else {
             WardLogger.keepAwake.error("Could not restore lid sleep — it is still disabled.")
             return false
         }
-        expiryTimer.stop()
-        session = nil
         hasWarnedAboutFailedRestore = false
         WardLogger.keepAwake.info("Keep-awake stopped; lid sleep restored.")
         return true
@@ -140,7 +147,7 @@ public final class KeepAwakeController: NSObject {
     /// A crash or force-quit leaves the flag set with no session to expire it.
     /// Nothing at launch can belong to this process, so a set flag is a leak.
     func offerToRestoreUnownedSetting() {
-        guard session == nil, LidSleepSetting.currentState.mayBeDisabled else {
+        guard cappedSession.current == nil, LidSleepSetting.currentState.mayBeDisabled else {
             return
         }
         WardLogger.keepAwake.notice("Lid sleep is disabled but unowned — offering to restore.")
@@ -207,7 +214,7 @@ public final class KeepAwakeController: NSObject {
     }
 
     private func expireSessionIfElapsed() {
-        guard let session, session.isExpired(at: .now) else {
+        guard let session = cappedSession.current, session.isExpired(at: .now) else {
             return
         }
         WardLogger.keepAwake.info("Keep-awake expired; restoring lid sleep.")

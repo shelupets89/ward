@@ -21,8 +21,7 @@ public final class KeepScreenAwakeController: NSObject {
     /// a separate `IOPMAssertionID`, so neither feature's release can cancel the
     /// other's assertion.
     private let displaySleepPreventer = DisplaySleepPreventer(assertionName: "Ward Keep Screen Awake")
-    private var session: KeepAwakeSession?
-    private lazy var expiryTimer = ExpiryTimer(interval: Self.expiryCheckInterval) { [weak self] in
+    private lazy var cappedSession = CappedSession(expiryCheckInterval: Self.expiryCheckInterval) { [weak self] in
         self?.endSessionIfExpired()
     }
 
@@ -48,12 +47,12 @@ public final class KeepScreenAwakeController: NSObject {
     /// expiry checks can never leave the menu offering to turn off a session
     /// that has already run out.
     var state: KeepScreenAwakeState {
-        return KeepScreenAwakeState(session: session, at: .now)
+        return KeepScreenAwakeState(session: cappedSession.current, at: .now)
     }
 
     func start(for option: KeepAwakeDuration) {
         endSessionIfExpired()
-        guard session == nil else {
+        guard cappedSession.current == nil else {
             return
         }
         guard displaySleepPreventer.beginPreventingDisplaySleep() else {
@@ -61,30 +60,33 @@ public final class KeepScreenAwakeController: NSObject {
             presentAssertionFailedAlert()
             return
         }
-        session = KeepAwakeSession(startedAt: .now, duration: option.duration)
-        expiryTimer.start()
+        // Nothing on the way here suspends, so unlike the lid-closed feature
+        // this cannot currently refuse. Handled rather than discarded because
+        // the alternative is logging a start that did not happen.
+        guard cappedSession.begin(KeepAwakeSession(startedAt: .now, duration: option.duration)) else {
+            WardLogger.keepScreenAwake.notice("Ignoring a start that found a session already running.")
+            return
+        }
         WardLogger.keepScreenAwake.info("Keep Screen Awake active for \(option.menuTitle, privacy: .public).")
     }
 
-    /// Releases first and only then forgets the session, so a refused release
-    /// leaves the timer retrying and the menu still offering to turn it off —
-    /// which is the truth. Tearing down first would report "off" while the
-    /// screen was still held awake.
+    /// `CappedSession.end(by:)` releases first and only then forgets the
+    /// session, so a refused release leaves the check retrying and the menu
+    /// still offering to turn it off — which is the truth. Forgetting first
+    /// would report "off" while the screen was still held awake.
     ///
     /// A session therefore outlives its own cap when the OS refuses to let go.
     /// That is what `KeepScreenAwakeState.overrunning` exists to show; treating
     /// the cap alone as "ended" is what made an earlier version lie.
     @discardableResult
     func stop() -> Bool {
-        guard session != nil else {
+        guard cappedSession.current != nil else {
             return true
         }
-        guard displaySleepPreventer.endPreventingDisplaySleep() else {
+        guard cappedSession.end(by: { displaySleepPreventer.endPreventingDisplaySleep() }) else {
             WardLogger.keepScreenAwake.error("Display assertion refused to release; the screen is still held awake.")
             return false
         }
-        expiryTimer.stop()
-        session = nil
         WardLogger.keepScreenAwake.info("Keep Screen Awake stopped; the display can sleep again.")
         return true
     }
@@ -93,7 +95,7 @@ public final class KeepScreenAwakeController: NSObject {
     /// ticks. Sweeping here too keeps what the menu says and what the power
     /// assertion actually is from disagreeing.
     func endSessionIfExpired() {
-        guard let session, session.isExpired(at: .now) else {
+        guard let session = cappedSession.current, session.isExpired(at: .now) else {
             return
         }
         WardLogger.keepScreenAwake.info("Keep Screen Awake reached its time cap.")
