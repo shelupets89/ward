@@ -42,7 +42,7 @@ Power button, lid close, and some trackpad gestures — hardware level. The powe
 
 | Path | Contents |
 | --- | --- |
-| `Sources/Pure/` | `EscapeHoldTracker` (exit state machine), `WatchedModifiers`, `SystemDefinedKeyEventDecoder` |
+| `Sources/Pure/` | `EscapeHoldTracker` (exit state machine), `WatchedModifiers`, `EscapeKeyCode`, `SystemDefinedKeyEventDecoder` |
 | `Sources/` | Event tap, shield windows, SwiftUI overlay, secure-input detector, controller |
 
 ## Tests
@@ -51,6 +51,8 @@ Power button, lid close, and some trackpad gestures — hardware level. The powe
 | --- | --- |
 | `EscapeHoldTrackerTests` | Every transition: hold, cancel, suppress-until-release, modifier gate, auto-repeat, clamping |
 | `WatchedModifiersTests` | Which modifiers cancel a hold, and that Caps Lock doesn't |
+| `EscapeKeyCodeTests` | That esc is recognised from both input sources' key-code widths, and its keyboard neighbours are not |
 | `SystemDefinedKeyEventDecoderTests` | Media-key press/release decoding from the packed `data1` field |
+| `InputEventHandlersTests` | The routing table both input sources share: which handler each key event fires, that a non-escape key-up fires nothing, and that delivery order is preserved |
 
 Manual (needs Accessibility): type and press media keys during the mode → nothing happens; hold `esc` 5s → exits; hold `esc`+letter for 10s → does not exit; unplug a display mid-session → shields rebuild.

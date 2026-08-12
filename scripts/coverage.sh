@@ -3,8 +3,9 @@
 #
 # Measures every Pure/ directory and nothing else.
 #
-# Pure/ holds logic that is a function of its inputs — no AppKit, no IOKit, no
-# system calls — so it can be tested properly and must be. Everything outside
+# Pure/ holds logic that is a function of its inputs — no live AppKit object, no
+# IOKit, no system calls; framework value types like NSEvent.ModifierFlags are
+# fine — so it can be tested properly and must be. Everything outside
 # Pure/ is glue that needs a running app and granted TCC permissions; holding it
 # to a coverage number would only reward writing fake tests for it.
 #

@@ -11,10 +11,8 @@ enum SecureInputDetector {
     }
 
     /// Isolated rather than asserting isolation internally: this is `internal`
-    /// on an `enum`, so anything in the module can call it. Declaring the
-    /// requirement makes a wrong caller a compile error instead of a trap, and
-    /// leaves the assertion to `enterCleaningMode`, where the main-thread
-    /// reasoning is local and checkable.
+    /// on an `enum`, so anything in the module can call it, and declaring the
+    /// requirement makes a wrong caller a compile error instead of a trap.
     @MainActor
     static func presentSecureInputBlockedAlert() {
         WardAlert.presentFailure(
