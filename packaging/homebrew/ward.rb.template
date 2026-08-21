@@ -87,10 +87,12 @@ class Ward < Formula
     ).strip
     assert_equal version.to_s, bundle_version
 
-    # A shim still holding the placeholder is executable, exits 0 on nothing,
-    # and links a directory named __WARD_APP__. `inreplace` would have failed
-    # the build — unless something later rewrote or reinstalled the file, which
-    # is the case this catches and that one cannot.
+    # Two things already stand between a user and an unsubstituted shim:
+    # `inreplace` fails the build when the placeholder is not found, and the
+    # shim refuses to run while it still holds one — it dies at its own `-d`
+    # guard, exit 1, having linked nothing. Neither covers the file being
+    # rewritten or replaced *after* that step, which is the only route by which
+    # a placeholder could actually reach someone. That is what this catches.
     refute_match "__WARD_APP__", (bin/"ward").read
 
     # /Applications is off-limits in here for the same reason it is off-limits

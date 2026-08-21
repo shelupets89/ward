@@ -22,6 +22,8 @@ That links Ward into `/Applications` and opens it. Running it again is harmless:
 
 Use the full `shelupets89/ward/ward` name rather than tapping first and installing `ward` — Homebrew only auto-trusts a formula you name in full, and the short form is refused as coming from an untrusted tap.
 
+`brew uninstall ward` removes the app but not the link, leaving it dangling — `rm /Applications/Ward.app` clears it. (`caveats` says this too, but only at install time, which is not when you need it.)
+
 Update with `brew upgrade ward` — the symlink follows, so it's a one-time step. **The Accessibility grant does not survive an upgrade**: Ward is ad-hoc signed, every upgrade rebuilds it into a binary macOS considers a different app, and grants are tied to the binary. Cleaning Mode needs re-granting each time.
 
 Re-granting means **removing Ward from the Accessibility list with `−` and adding it back** — not flipping its switch. The old entry keeps showing its toggle **on** while granting nothing, because it still refers to the previous build. That looks exactly like a working grant and isn't one.

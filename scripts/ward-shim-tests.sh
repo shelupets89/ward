@@ -52,10 +52,13 @@ new_case() {
     : > "${OPEN_LOG}"
 }
 
+# The optional argument overrides the launcher, for the one case that needs a
+# failing one. Spelled as a default rather than a second copy of this wiring, so
+# there is only one place the four variables can drift out of step.
 run_shim() {
     env WARD_APP_PATH="${KEG_APP}" \
         WARD_APPLICATIONS_DIR="${APPS}" \
-        WARD_OPEN_COMMAND="${FAKE_OPEN}" \
+        WARD_OPEN_COMMAND="${1:-${FAKE_OPEN}}" \
         WARD_TEST_OPEN_LOG="${OPEN_LOG}" \
         bash "${SHIM}"
 }
@@ -127,6 +130,11 @@ check "  and it opened the link it just made" holds_text "${OPEN_LOG}" "${LINK}"
 
 new_case
 run_shim > /dev/null 2>&1
+# fake-open appends, and new_case truncates only once — so without this the
+# check below is satisfied by the priming run's entry and proves nothing about
+# the run under test. Verified by mutation: a shim whose `keep` branch exits
+# before it opens anything passed this whole suite 25/25 until this line existed.
+: > "${OPEN_LOG}"
 expect "says so and re-opens when already linked" accepts "already points at this Ward" run_shim
 check "  the link is unchanged" links_to "${LINK}" "${KEG_APP}"
 check "  and re-running still opens Ward" holds_text "${OPEN_LOG}" "${LINK}"
@@ -186,10 +194,23 @@ expect "fails when there is nowhere to link into" rejects "no directory at" run_
 # failed launch as a failure to install — the message says the link is in place,
 # and that claim gets checked rather than trusted.
 new_case
-expect "reports a launcher that fails" rejects "could not open" \
-    env WARD_APP_PATH="${KEG_APP}" WARD_APPLICATIONS_DIR="${APPS}" WARD_OPEN_COMMAND=false \
-    bash "${SHIM}"
+expect "reports a launcher that fails" rejects "could not open" run_shim false
 check "  and the link it made is still there" links_to "${LINK}" "${KEG_APP}"
+
+# `ln` is the only filesystem write here, and it was the only failure that
+# printed a raw system error instead of a sentence. Skipped under root, where
+# the mode bits below would not stop anything and the case would pass without
+# ever reaching the guard — CI's ubuntu runner is unprivileged, so it runs there.
+if [ "$(id -u)" -ne 0 ]; then
+    new_case
+    chmod 555 "${APPS}"
+    expect "names the problem when it cannot write to /Applications" rejects "could not write" \
+        run_shim
+    chmod 755 "${APPS}"
+    check "  and it linked nothing" test ! -e "${LINK}"
+else
+    echo "skip (running as root): cannot write to /Applications"
+fi
 
 echo
 printf '%s passed, %s failed\n' "${PASSED}" "${FAILED}"

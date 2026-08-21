@@ -34,11 +34,31 @@ die() {
     exit 1
 }
 
-# An .app is a directory, so cd + `pwd -P` resolves it. macOS ships no
-# /usr/bin/realpath (checked), and `readlink -f` is GNU-only — absent from the
-# BSD readlink this runs against on the machines that matter.
+# An .app is a directory, so cd + `pwd -P` resolves it using nothing but the
+# shell. Current macOS does ship both `readlink -f` and /bin/realpath, so this
+# is a portability choice rather than a workaround for their absence: the
+# formula's floor is Ventura, this script's guards are also exercised on Linux
+# in CI, and BSD and GNU disagree about what those tools do with a path that
+# does not exist — BSD `readlink -f` exits 1 where GNU prints the path and
+# succeeds. `pwd -P` behaves the same everywhere.
 physical_path() {
     ( cd "$1" 2>/dev/null && pwd -P ) || true
+}
+
+# `ln` is the only thing here that touches the filesystem, and on its own it
+# fails with a raw system error where every other failure in this script prints
+# a sentence naming what to do. The likeliest cause by far is a /Applications
+# that cannot be written — a non-admin account, or a managed fleet — which is
+# worth saying out loud rather than leaving as "Permission denied".
+link_or_die() {
+    local error
+    error="$("$@" 2>&1)" && return 0
+    die <<EOF
+could not write ${LINK}
+${error}
+/Applications is writable by admin users; on a non-admin or managed account it
+may not be. Nothing was changed.
+EOF
 }
 
 # Two spellings of one app: a link written against the Cellar path and one
@@ -104,7 +124,10 @@ fi
 
 case "${ACTION}" in
     create)
-        ln -s "${WARD_APP}" "${LINK}"
+        # No -f, deliberately: plain `ln -s` refuses to clobber an existing
+        # path, so if anything raced into the destination between the decision
+        # above and here, this fails rather than overwriting it.
+        link_or_die ln -s "${WARD_APP}" "${LINK}"
         echo "Linked ${LINK} -> ${WARD_APP}"
         ;;
     relink)
@@ -112,11 +135,21 @@ case "${ACTION}" in
         # and writes the new link *inside* the old target, leaving Ward.app
         # linked where it was and a stray Ward.app/Ward.app behind it. Both BSD
         # and GNU ln spell that flag -n.
-        ln -sfn "${WARD_APP}" "${LINK}"
+        link_or_die ln -sfn "${WARD_APP}" "${LINK}"
         echo "Relinked ${LINK} -> ${WARD_APP}"
         ;;
     keep)
         echo "${LINK} already points at this Ward."
+        ;;
+    *)
+        # Unreachable today. Worth writing anyway: a `case` that matches nothing
+        # is a silent no-op in bash, not an error `set -e` catches, so a future
+        # branch that set ACTION to a fourth value would fall straight through
+        # to "Opening Ward…" having linked nothing, and say so cheerfully.
+        die <<EOF
+internal error: unhandled action '${ACTION}'.
+Nothing was changed. Please report this.
+EOF
         ;;
 esac
 
