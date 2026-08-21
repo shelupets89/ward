@@ -151,10 +151,14 @@ jobs:
 
       # These scripts write to /etc/sudoers.d and run commands as root, so they
       # get linted even though the app itself is macOS-only.
+      # packaging/homebrew/ward is named for what a user types, so it carries no
+      # .sh extension and the glob does not reach it. Named explicitly rather
+      # than widening the glob to the whole tree: of every shell script here it
+      # is the only one that installs onto other people's machines.
       - name: ShellCheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck
-          shellcheck --severity=warning scripts/*.sh
+          shellcheck --severity=warning scripts/*.sh packaging/homebrew/ward
 
       # The formula job proves render-formula.sh accepts a good tarball; nothing
       # there can prove it still *rejects* a bad one, because a job that has to
@@ -167,3 +171,12 @@ jobs:
       # portability its own mktemp comment claims.
       - name: render-formula.sh guards
         run: bash scripts/render-formula-tests.sh
+
+      # Same shape of blind spot, one layer over. The formula's own `test do`
+      # links into an empty scratch directory, which is the one case the shim
+      # cannot get wrong; every branch that refuses to touch something needs a
+      # /Applications that already holds an app, and `brew test` has nowhere to
+      # stage that. A guard that stopped refusing would pass `brew test` and
+      # replace a real app bundle on the first machine that had one.
+      - name: ward shim guards
+        run: bash scripts/ward-shim-tests.sh
