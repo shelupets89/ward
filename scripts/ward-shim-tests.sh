@@ -55,6 +55,13 @@ new_case() {
 # The optional argument overrides the launcher, for the one case that needs a
 # failing one. Spelled as a default rather than a second copy of this wiring, so
 # there is only one place the four variables can drift out of step.
+#
+# The one call that passes it goes through `expect`, which invokes its trailing
+# arguments as a command — so no call site names `run_shim` with an argument in
+# a way shellcheck can follow, and 0.9.0 (CI's version) reports SC2120. 0.11.0
+# no longer does, which is exactly why this needs saying rather than relying on
+# whichever shellcheck happens to be on the machine.
+# shellcheck disable=SC2120
 run_shim() {
     env WARD_APP_PATH="${KEG_APP}" \
         WARD_APPLICATIONS_DIR="${APPS}" \
