@@ -74,7 +74,7 @@ jobs:
       - name: Build .dmg
         run: bash scripts/make-dmg.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Ward-unsigned
           path: |
