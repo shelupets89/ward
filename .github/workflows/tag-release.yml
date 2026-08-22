@@ -37,7 +37,7 @@ jobs:
     steps:
       # Tags are the whole input to the decision below, so a shallow clone
       # without them would conclude that every version is unreleased.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
