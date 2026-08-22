@@ -151,14 +151,15 @@ jobs:
 
       # These scripts write to /etc/sudoers.d and run commands as root, so they
       # get linted even though the app itself is macOS-only.
-      # packaging/homebrew/ward is named for what a user types, so it carries no
-      # .sh extension and the glob does not reach it. Named explicitly rather
-      # than widening the glob to the whole tree: of every shell script here it
-      # is the only one that installs onto other people's machines.
+      # Both the version and the file list live in the script rather than here.
+      # apt's shellcheck on ubuntu-latest is 0.9.0; a current `brew install` is
+      # 0.11.0, and they disagree about real diagnostics. That cost a red build
+      # on a tree that linted clean locally — and the same gap runs the other
+      # way, where this runner would pass a file on a check its newer local
+      # counterpart had already dropped. The script pins one version by
+      # checksum and refuses to lint with any other.
       - name: ShellCheck
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y shellcheck
-          shellcheck --severity=warning scripts/*.sh packaging/homebrew/ward
+        run: bash scripts/shellcheck.sh
 
       # The formula job proves render-formula.sh accepts a good tarball; nothing
       # there can prove it still *rejects* a bad one, because a job that has to
@@ -180,3 +181,11 @@ jobs:
       # replace a real app bundle on the first machine that had one.
       - name: ward shim guards
         run: bash scripts/ward-shim-tests.sh
+
+      # The pin is only worth having if the check that enforces it still fires.
+      # It never does in normal use — every run resolves the right version — so
+      # a guard that quietly inverted would leave this job green while linting
+      # with whatever happened to be on the runner, which is the exact drift the
+      # script was written to end.
+      - name: shellcheck.sh guards
+        run: bash scripts/shellcheck-tests.sh
