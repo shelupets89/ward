@@ -26,7 +26,7 @@ jobs:
     # needs an Xcode 16+ image. The guard below fails loudly if that changes.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: |
@@ -54,7 +54,7 @@ jobs:
     name: Package app
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Proves the release path still works on every change — a broken
       # make-app.sh should not be discovered at tag time.
@@ -86,7 +86,7 @@ jobs:
     name: Homebrew formula
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The tap's formula is rendered, never hand-edited, so what needs guarding
       # is that the template still renders to something Homebrew accepts, builds,
@@ -147,7 +147,7 @@ jobs:
     name: Shell scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # These scripts write to /etc/sudoers.d and run commands as root, so they
       # get linted even though the app itself is macOS-only.

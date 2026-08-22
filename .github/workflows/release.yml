@@ -31,7 +31,7 @@ jobs:
       # the run started from is not the tag being released, and everything below
       # reads this tree — including the Info.plist the version check compares the
       # tag against. On a tag push github.ref_name is the tag, so this is a no-op.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
@@ -143,7 +143,7 @@ jobs:
       # while building `url` from ${TAG} alone, so a wrong ref pins the formula
       # body of one commit to another commit's tarball — and every step below
       # still passes, because nothing else re-derives the template.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
