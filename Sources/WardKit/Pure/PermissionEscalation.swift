@@ -28,10 +28,50 @@ enum PermissionEscalation {
         /// Ward's own alert, which is the only one that can name the bundle.
         case explain
         /// The system prompt. Kept, and kept before the pane opens, because it
-        /// is what puts a row in the list for the user to enable — the dialog it
-        /// also shows is the cost of that, not the point of it.
+        /// is understood to be what puts a row in the list for the user to
+        /// enable — the dialog it also shows is the cost of that, not the point
+        /// of it.
+        ///
+        /// "Understood to be", not measured: `TCC.db` is unreadable even with
+        /// `sudo` (`CLAUDE.md`), and confirming it would mean revoking a real
+        /// grant to watch the row vanish. It is why the call is moved rather
+        /// than deleted, which is the conservative reading either way.
         case registerWithSystem
         case openSettingsPane
+    }
+
+    /// Which grant is being escalated, and everything that differs between the
+    /// two because of it.
+    ///
+    /// The pane and the button title live here rather than at the call site
+    /// because the call site got to pair them itself, and nothing noticed when
+    /// it paired them wrongly: swapping the two URL constants sent a button
+    /// reading "Open Accessibility Settings" to the Input Monitoring pane, with
+    /// the whole suite green. Here the pairing is a value that can be asserted.
+    ///
+    /// `CaseIterable` so a test can be exhaustive over this for real, rather
+    /// than over a hand-typed list that a new case would never join.
+    enum Grant: Equatable, Sendable, CaseIterable {
+        case accessibility
+        case inputMonitoring
+
+        var settingsURLString: String {
+            switch self {
+            case .accessibility:
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            case .inputMonitoring:
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            }
+        }
+
+        var settingsButtonTitle: String {
+            switch self {
+            case .accessibility:
+                return "Open Accessibility Settings"
+            case .inputMonitoring:
+                return "Open Input Monitoring Settings"
+            }
+        }
     }
 
     /// Deliberately returns the whole ordered list rather than one step at a

@@ -13,11 +13,6 @@ import ApplicationServices
 /// prompt can no longer arrive before the alert that explains it.
 @MainActor
 public enum InputPermissions {
-    private static let accessibilitySettingsURLString =
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-    private static let inputMonitoringSettingsURLString =
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
-
     public static func ensureAccessibilityGranted() -> Bool {
         // `AXIsProcessTrusted` is the preflight — the check that never shows a
         // dialog. The prompting variant lives in the hand-off below, where the
@@ -32,8 +27,7 @@ public enum InputPermissions {
             informativeText: InputPermissionAlertBody.describeMissingAccessibility(
                 runningBundlePath: runningBundlePath
             ),
-            settingsButtonTitle: "Open Accessibility Settings",
-            settingsURLString: accessibilitySettingsURLString,
+            grant: .accessibility,
             registerWithSystem: {
                 // Written out here rather than behind a name of its own. A named
                 // `promptSystemAccessibilityDialog()` is what made calling it too
@@ -58,8 +52,7 @@ public enum InputPermissions {
             informativeText: InputPermissionAlertBody.describeRefusedInputTap(
                 runningBundlePath: runningBundlePath
             ),
-            settingsButtonTitle: "Open Input Monitoring Settings",
-            settingsURLString: inputMonitoringSettingsURLString,
+            grant: .inputMonitoring,
             registerWithSystem: {
                 // The SDK is explicit that this prompts: "Requests event
                 // listening access if absent, potentially prompting"
@@ -79,26 +72,31 @@ public enum InputPermissions {
     private static func escalate(
         messageText: String,
         informativeText: String,
-        settingsButtonTitle: String,
-        settingsURLString: String,
+        grant: PermissionEscalation.Grant,
         registerWithSystem: () -> Void
     ) {
         let userChoseSettings = askUser(
             messageText: messageText,
             informativeText: informativeText,
-            settingsButtonTitle: settingsButtonTitle
+            settingsButtonTitle: grant.settingsButtonTitle
         )
         for step in PermissionEscalation.nextSteps(.explained(userChoseSettings: userChoseSettings)) {
             switch step {
             case .explain:
                 // Unreachable from `.explained` — the explanation is what got us
-                // here. Handled rather than defaulted so that a new step added
-                // to `Step` is a compile error here, not a silent no-op.
-                break
+                // here. Naming the case rather than writing `default` is what
+                // makes a step added to `Step` a compile error at this switch;
+                // that much the compiler enforces. Reaching *this* arm would
+                // mean the escalation changed under us, so it says so rather
+                // than falling through silently, which is what the same
+                // situation gets in `FreePortController.report`.
+                WardLogger.inputBlocking.fault(
+                    "Escalation asked for an explanation after one had already been shown."
+                )
             case .registerWithSystem:
                 registerWithSystem()
             case .openSettingsPane:
-                openSettingsPane(settingsURLString)
+                openSettingsPane(grant.settingsURLString)
             }
         }
     }

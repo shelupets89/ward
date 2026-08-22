@@ -154,7 +154,7 @@ public enum WardAlert {
 - A `CGPreflightListenEventAccess()` preflight for Input Monitoring — real asymmetry, different change
 - Any edit to `InputPermissionAlertBody` — the text already names the bundle and the stale entry
 - Deleting either dialog — each carries what the other cannot
-- A test that drives `NSAlert` — impossible in this target, and now unnecessary: the sequencing is no longer in the glue
+- A test that drives `NSAlert` — impossible in this target. Not "unnecessary": the glue can still be edited to call the prompt inline before asking for steps, and a reviewer demonstrated exactly that with the whole suite green. What moved out of the glue is tested; what is left in it is not
 
 ---
 

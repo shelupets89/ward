@@ -5,17 +5,20 @@ import Testing
 /// fired before Ward's alert, so two modals arrived together and the one that
 /// could name the bundle was behind the one that could not.
 ///
-/// They assert exact arrays, never membership. Every wrong order contains the
-/// right steps, so `contains` would pass against all of them — which is the way
-/// an ordering test stops testing the ordering.
+/// Every case asserts an exact array. Membership would pass against every wrong
+/// order, since each of them contains the right steps — which is how an ordering
+/// test stops testing the ordering. An earlier version of this file kept a
+/// `contains` case alongside these and claimed in the same breath to use none;
+/// it was removed rather than the sentence softened, because it caught nothing
+/// the exact-array cases did not already catch.
 struct PermissionEscalationTests {
     @Test("Asks for nothing when the permission is already granted")
     func silentWhenAlreadyGranted() {
         #expect(PermissionEscalation.nextSteps(.notYetAsked(isAlreadyGranted: true)) == [])
     }
 
-    /// The regression case. A machine that put `.registerWithSystem` here is
-    /// exactly what the old code did.
+    /// The regression case. Handing out `.registerWithSystem` here is exactly
+    /// what the old code did.
     @Test("Explains, and only explains, before the user has answered")
     func explainsFirstWhenNotGranted() {
         #expect(PermissionEscalation.nextSteps(.notYetAsked(isAlreadyGranted: false)) == [.explain])
@@ -36,27 +39,31 @@ struct PermissionEscalationTests {
         )
     }
 
-    /// The invariant, over the whole stage space rather than one stage at a
-    /// time. `Stage` has two cases each carrying one `Bool`, so four values is
-    /// exhaustive — and if a stage is ever added, this case is what notices that
-    /// the new one can hand out `.registerWithSystem` too early.
-    @Test("No stage registers with the system before Ward has explained")
-    func nothingRegistersBeforeExplaining() {
-        let everyStage: [PermissionEscalation.Stage] = [
-            .notYetAsked(isAlreadyGranted: true),
-            .notYetAsked(isAlreadyGranted: false),
-            .explained(userChoseSettings: true),
-            .explained(userChoseSettings: false),
-        ]
-        for stage in everyStage {
-            let steps = PermissionEscalation.nextSteps(stage)
-            guard case .notYetAsked = stage else {
-                continue
-            }
-            #expect(
-                !steps.contains(.registerWithSystem),
-                "\(stage) hands out the system prompt before anything has been explained"
-            )
-        }
+    /// Which pane each button opens was glue until it was data, and glue got it
+    /// wrong silently: swapping the two URL constants pointed a button reading
+    /// "Open Accessibility Settings" at the Input Monitoring pane, and the whole
+    /// suite stayed green.
+    @Test("Sends each grant to its own pane")
+    func eachGrantNamesItsOwnPane() {
+        #expect(PermissionEscalation.Grant.accessibility.settingsURLString.hasSuffix("Privacy_Accessibility"))
+        #expect(PermissionEscalation.Grant.inputMonitoring.settingsURLString.hasSuffix("Privacy_ListenEvent"))
+    }
+
+    @Test("Labels each grant's button with the pane it opens")
+    func eachGrantNamesItsOwnButton() {
+        #expect(PermissionEscalation.Grant.accessibility.settingsButtonTitle == "Open Accessibility Settings")
+        #expect(PermissionEscalation.Grant.inputMonitoring.settingsButtonTitle == "Open Input Monitoring Settings")
+    }
+
+    /// Exhaustive for real, over `allCases` rather than a hand-typed list a new
+    /// case would never join. Two grants sharing a pane, or a title, is the
+    /// copy-paste this notices — including for a third grant nobody has thought
+    /// of yet.
+    @Test("No two grants share a pane or a button title")
+    func grantsAreDistinct() {
+        let panes = PermissionEscalation.Grant.allCases.map(\.settingsURLString)
+        let titles = PermissionEscalation.Grant.allCases.map(\.settingsButtonTitle)
+        #expect(Set(panes).count == PermissionEscalation.Grant.allCases.count)
+        #expect(Set(titles).count == PermissionEscalation.Grant.allCases.count)
     }
 }
