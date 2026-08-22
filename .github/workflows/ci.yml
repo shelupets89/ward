@@ -189,3 +189,11 @@ jobs:
       # script was written to end.
       - name: shellcheck.sh guards
         run: bash scripts/shellcheck-tests.sh
+
+      # release-tag.sh decides whether a version gets published. Its guards only
+      # fire when a release is already going wrong — a malformed version, one
+      # already tagged, one older than what is out — so none of them run during
+      # a normal release, and a guard that inverted would be found by a bad
+      # release rather than a red build.
+      - name: release-tag.sh guards
+        run: bash scripts/release-tag-tests.sh

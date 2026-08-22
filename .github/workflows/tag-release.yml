@@ -1,0 +1,113 @@
+name: Tag release
+
+# The tag is derived from Info.plist rather than typed, which removes the one
+# way this step used to go wrong: release.yml refuses a tag that disagrees with
+# the bundle version, and finding that out meant a failed release rather than a
+# failed check. There is nothing left to keep in step.
+#
+# Deliberately not automatic about *which* version. Choosing patch over minor is
+# a judgement about what changed, and nothing here is in a position to make it —
+# so bumping Info.plist stays a reviewed pull request, and only the mechanical
+# half is automated.
+on:
+  push:
+    branches: [main]
+    paths: ['Support/Info.plist']
+  # For recovering a release whose tag was deleted, or one where this job was
+  # skipped. Safe to re-run: an already-tagged version is a no-op.
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the tag
+  actions: write # start Release, which pushing the tag does not
+
+# Two bumps landing together must not both decide they are newest.
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag and release
+    # macos, only because PlistBuddy is where every other workflow here reads
+    # this value from. Reading it a second way on Linux would be a second
+    # implementation of the same thing, which is what render-formula.sh exists
+    # to stop happening elsewhere.
+    runs-on: macos-15
+    steps:
+      # Tags are the whole input to the decision below, so a shallow clone
+      # without them would conclude that every version is unreleased.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the version this commit ships
+        id: version
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Support/Info.plist)"
+          echo "Info.plist says ${VERSION}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      # Every guard lives in the script, where scripts/release-tag-tests.sh can
+      # reach them. A version that is malformed, already tagged, or older than
+      # what is released is decided there, not here.
+      - name: Decide whether it needs a tag
+        id: decide
+        run: bash scripts/release-tag.sh "${{ steps.version.outputs.version }}"
+
+      - name: Tag it
+        if: steps.decide.outputs.should-tag == 'true'
+        env:
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Ward ${TAG}"
+          git push origin "${TAG}"
+
+      # A tag pushed with GITHUB_TOKEN does not start a workflow — GitHub
+      # suppresses that to stop a workflow triggering itself. release.yml
+      # listens for `push: tags`, so left alone it would never run and the tag
+      # would sit there looking released. Its workflow_dispatch input is what
+      # this reaches instead.
+      # Recorded before dispatching, so the check below can tell a run this
+      # started from one that was already there. Matching on "a workflow_dispatch
+      # run exists" would pass on someone else's release from last week.
+      - name: Note the newest Release run before starting one
+        id: before
+        if: steps.decide.outputs.should-tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREVIOUS="$(gh run list --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          echo "newest Release run before this: ${PREVIOUS}"
+          echo "run-id=${PREVIOUS}" >> "${GITHUB_OUTPUT}"
+
+      - name: Start the release
+        if: steps.decide.outputs.should-tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: gh workflow run Release --ref main --field tag="${TAG}"
+
+      # `gh workflow run` reports whether the request was accepted, not whether
+      # a run exists — and a tag with no release behind it is the failure this
+      # whole job would otherwise hide. So the run is looked for rather than
+      # assumed.
+      - name: Confirm the release actually started
+        if: steps.decide.outputs.should-tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: |
+          PREVIOUS="${{ steps.before.outputs.run-id }}"
+          for _ in $(seq 1 12); do
+            LATEST="$(gh run list --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "${LATEST}" -gt "${PREVIOUS}" ]; then
+              echo "Release run ${LATEST} started for ${TAG} (was ${PREVIOUS})."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Tagged ${TAG} but no Release run appeared. Start it by hand: gh workflow run Release --field tag=${TAG}"
+          exit 1

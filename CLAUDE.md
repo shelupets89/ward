@@ -45,6 +45,19 @@ bash scripts/make-icon.sh           # → Support/Ward.icns (only when changing 
 bash scripts/lid-sleep-probe.sh 90
 ```
 
+## Releasing
+
+Bump `CFBundleShortVersionString` in `Support/Info.plist`, in a pull request, and merge it. That is the whole manual step.
+
+`tag-release.yml` then derives `v<version>` from the plist, pushes it, and starts `release.yml` — which tests, builds the DMG, publishes the release, and renders the formula into the tap. Choosing the version is deliberately *not* automated: patch versus minor is a judgement about what changed.
+
+Two things that are easy to get wrong here:
+
+- **A tag pushed by a workflow does not start another workflow.** GitHub suppresses that to prevent recursion, so `tag-release.yml` reaches `release.yml`'s `workflow_dispatch` explicitly rather than relying on `push: tags`. Removing that dispatch leaves a tag with no release behind it.
+- **`release.yml` publishes the GitHub release before it updates the tap.** The tap job runs `brew install` and `brew test` against the real formula, so a failure there leaves a published release pointing at a tap that was not updated. Re-run the workflow rather than re-tagging.
+
+`scripts/release-tag.sh` holds the guards — malformed version, already tagged, older than what is released — and `scripts/release-tag-tests.sh` exercises each, since none of them fire during a release that is going right.
+
 Launch the built `.app`, never `swift run` — TCC grants attach to whatever launched the process.
 
 ## Environment facts (verified — don't re-derive)
