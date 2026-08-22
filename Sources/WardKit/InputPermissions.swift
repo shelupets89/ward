@@ -17,10 +17,22 @@ public enum InputPermissions {
         // `AXIsProcessTrusted` is the preflight — the check that never shows a
         // dialog. The prompting variant lives in the hand-off below, where the
         // user has already asked for it.
-        guard PermissionEscalation.nextSteps(
+        let opening = PermissionEscalation.nextSteps(
             .notYetAsked(isAlreadyGranted: AXIsProcessTrusted())
-        ) == [.explain] else {
+        )
+        if opening.isEmpty {
             return true
+        }
+        // Anything other than "explain" is a shape this does not recognise, and
+        // the safe reading of it is not "granted". An earlier version compared
+        // for equality and fell through to `return true`, which made an
+        // unrecognised escalation indistinguishable from a granted one — the
+        // optimistic branch, where `FreePortController` fails loud instead.
+        guard opening == [.explain] else {
+            WardLogger.inputBlocking.fault(
+                "Escalation asked for something other than an explanation before anything was shown."
+            )
+            return false
         }
         escalate(
             messageText: "Ward needs Accessibility access",
@@ -34,7 +46,7 @@ public enum InputPermissions {
                 // early a single line to type, and that is the call this whole
                 // arrangement exists to keep behind the explanation.
                 let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-                AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+                _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
             }
         )
         return false

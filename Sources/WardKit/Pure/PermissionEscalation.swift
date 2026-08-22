@@ -15,8 +15,8 @@
 /// unexpressible is `Stage` — no stage yields `.registerWithSystem` before an
 /// explanation has happened, so there is no way to ask for the system prompt
 /// first. Adding one would put the bug back.
-enum PermissionEscalation {
-    enum Stage: Equatable, Sendable {
+public enum PermissionEscalation {
+    public enum Stage: Equatable, Sendable {
         /// Nothing has been shown yet. `isAlreadyGranted` is the preflight
         /// answer — the non-prompting check, never the one that shows a dialog.
         case notYetAsked(isAlreadyGranted: Bool)
@@ -24,7 +24,7 @@ enum PermissionEscalation {
         case explained(userChoseSettings: Bool)
     }
 
-    enum Step: Equatable, Sendable {
+    public enum Step: Equatable, Sendable {
         /// Ward's own alert, which is the only one that can name the bundle.
         case explain
         /// The system prompt. Kept, and kept before the pane opens, because it
@@ -51,11 +51,11 @@ enum PermissionEscalation {
     ///
     /// `CaseIterable` so a test can be exhaustive over this for real, rather
     /// than over a hand-typed list that a new case would never join.
-    enum Grant: Equatable, Sendable, CaseIterable {
+    public enum Grant: Equatable, Sendable, CaseIterable {
         case accessibility
         case inputMonitoring
 
-        var settingsURLString: String {
+        public var settingsURLString: String {
             switch self {
             case .accessibility:
                 return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
@@ -64,7 +64,7 @@ enum PermissionEscalation {
             }
         }
 
-        var settingsButtonTitle: String {
+        public var settingsButtonTitle: String {
             switch self {
             case .accessibility:
                 return "Open Accessibility Settings"
@@ -78,7 +78,7 @@ enum PermissionEscalation {
     /// time. Registration and opening the pane are not separated by anything the
     /// caller has to observe in between, and a caller asking twice could be
     /// handed them in either order.
-    static func nextSteps(_ stage: Stage) -> [Step] {
+    public static func nextSteps(_ stage: Stage) -> [Step] {
         switch stage {
         case .notYetAsked(let isAlreadyGranted):
             return isAlreadyGranted ? [] : [.explain]
