@@ -43,7 +43,7 @@ We'll know we're right when a colleague runs `brew install shelupets89/ward/ward
 | Metric | Target | How Measured |
 |--------|--------|--------------|
 | Gatekeeper dialogs during install | **0** | Fresh machine or fresh user account: install and launch, count prompts |
-| Steps from zero to running app | 1 command | **Missed: 2.** `brew install shelupets89/ward/ward`, then the `ln -s` that `caveats` prints. Homebrew's sandbox makes one impossible for an app |
+| Steps from zero to running app | 1 command | **Missed: 2.** `brew install shelupets89/ward/ward`, then `ward`, which `caveats` prints. Homebrew's sandbox makes one impossible for an app — the second step is a `bin` shim rather than a pasted `ln -s`, but it is still a second step |
 | Update path | `brew upgrade ward` works with no manual step | Tag a release, bump formula, upgrade |
 | CLI feature coverage | ≥3 commands | `keep-awake`, `until`, `free-port` / `sleep-why` |
 | `Pure/` coverage after CLI lands | ≥85% (unchanged gate) | `scripts/coverage.sh` |
@@ -100,10 +100,10 @@ When a colleague tells me about a tool they built, I want to install it with one
 ### User Flow
 
 ```
-brew install shelupets89/ward/ward       # fully qualified — the short form is refused
+brew install shelupets89/ward/ward && ward   # fully qualified — the short form is refused
 # → compiles locally, no download, no Gatekeeper
-ln -s "$(brew --prefix ward)/Ward.app" /Applications   # brew cannot do this itself
-open /Applications/Ward.app   # menu-bar path
+# → `ward` is a bin shim: it links into /Applications and opens the app,
+#   because brew's own sandbox is not allowed to write there
 ward until npm run build      # terminal path (Phase 4)
 brew upgrade ward             # self-update; re-grant Accessibility after
 ```

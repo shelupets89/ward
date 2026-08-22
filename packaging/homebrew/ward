@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The step `brew install` is not allowed to take, reduced to one word.
+#
+# Homebrew cannot put anything in /Applications: post_install runs under
+# sandbox-exec and /Applications is not on the allowlist (Errno::EPERM), and
+# Keg.keg_link_directories is `bin etc include lib sbin share var`, so no
+# linking mechanism reaches it either. `bin` is the one directory Homebrew does
+# link onto PATH — which makes this the only place the follow-up command can
+# live without the user copying a path out of `caveats`.
+#
+# A precursor, not a squatter: the PRD's Phase 3 replaces this file with a Swift
+# `ward` executable carrying real subcommands. Bare `ward` meaning "link the app
+# and open it" is the behaviour that has to survive that swap, so nothing here
+# invents a subcommand grammar Phase 3 would then have to honour.
+
+# WARD_APP's default is filled in by the formula's `inreplace` at install time,
+# which fails the build if the placeholder is missing. All three overrides exist
+# so the guards below can be exercised against a scratch tree by
+# scripts/ward-shim-tests.sh; the formula's own `test do` is what proves the
+# substitution really happened in the file that ships.
+WARD_APP="${WARD_APP_PATH:-__WARD_APP__}"
+APPLICATIONS_DIR="${WARD_APPLICATIONS_DIR:-/Applications}"
+OPEN_COMMAND="${WARD_OPEN_COMMAND:-open}"
+
+LINK="${APPLICATIONS_DIR}/Ward.app"
+
+# Every failure below ends in something only the reader can decide, so each one
+# says what was found and stops, rather than guessing on their behalf. First
+# line is prefixed, the rest indented under it.
+die() {
+    sed -e '1s/^/ward: /' -e '2,$s/^/      /' >&2
+    exit 1
+}
+
+# An .app is a directory, so cd + `pwd -P` resolves it using nothing but the
+# shell. Current macOS does ship both `readlink -f` and /bin/realpath, so this
+# is a portability choice rather than a workaround for their absence: the
+# formula's floor is Ventura, this script's guards are also exercised on Linux
+# in CI, and BSD and GNU disagree about what those tools do with a path that
+# does not exist — BSD `readlink -f` exits 1 where GNU prints the path and
+# succeeds. `pwd -P` behaves the same everywhere.
+physical_path() {
+    ( cd "$1" 2>/dev/null && pwd -P ) || true
+}
+
+# `ln` is the only thing here that touches the filesystem, and on its own it
+# fails with a raw system error where every other failure in this script prints
+# a sentence naming what to do. The likeliest cause by far is a /Applications
+# that cannot be written — a non-admin account, or a managed fleet — which is
+# worth saying out loud rather than leaving as "Permission denied".
+link_or_die() {
+    local error
+    error="$("$@" 2>&1)" && return 0
+    die <<EOF
+could not write ${LINK}
+${error}
+/Applications is writable by admin users; on a non-admin or managed account it
+may not be. Nothing was changed.
+EOF
+}
+
+# Two spellings of one app: a link written against the Cellar path and one
+# written against opt resolve to the same directory. Compared physically so the
+# repair below can tell that case apart from a link to a genuinely different app.
+same_app() {
+    local resolved_a resolved_b
+    resolved_a="$(physical_path "$1")"
+    resolved_b="$(physical_path "$2")"
+    [ -n "${resolved_a}" ] && [ "${resolved_a}" = "${resolved_b}" ]
+}
+
+if [ ! -d "${WARD_APP}" ]; then
+    die <<EOF
+no app bundle at ${WARD_APP}
+The formula fills that path in when it installs this command, so a path that
+still reads like a placeholder means the install did not finish. Repair it with:
+  brew reinstall shelupets89/ward/ward
+EOF
+fi
+
+if [ ! -d "${APPLICATIONS_DIR}" ]; then
+    die <<EOF
+no directory at ${APPLICATIONS_DIR} to link into.
+EOF
+fi
+
+# Decided in full before anything is written, so that every refusal happens with
+# the destination still untouched.
+ACTION=create
+if [ -L "${LINK}" ]; then
+    CURRENT_TARGET="$(readlink "${LINK}")"
+    if [ "${CURRENT_TARGET}" = "${WARD_APP}" ]; then
+        ACTION=keep
+    elif [ ! -e "${LINK}" ]; then
+        # Dangling. `brew uninstall ward` leaves exactly this behind, and
+        # replacing it destroys nothing — there is nothing on the other end.
+        ACTION=relink
+    elif same_app "${LINK}" "${WARD_APP}"; then
+        # The same app named the long way round, most likely a link written
+        # against the Cellar path. Retargeting it at opt is the repair that
+        # makes the next `brew upgrade` a no-op instead of a dangling link.
+        ACTION=relink
+    else
+        die <<EOF
+${LINK} already links somewhere else:
+  ${CURRENT_TARGET}
+Refusing to retarget a link this did not create. Remove it and run ward again:
+  rm "${LINK}"
+EOF
+    fi
+elif [ -e "${LINK}" ]; then
+    # A real bundle — a DMG install, or a copy someone dragged there. macOS
+    # treats it as a different app from this one and holds separate permission
+    # grants for it, so replacing it would quietly cost the user those grants.
+    die <<EOF
+${LINK} is a real app bundle, not a link.
+Refusing to replace an app this did not create — macOS holds its Accessibility
+grant separately, and that grant would go with it. Move it aside first:
+  mv "${LINK}" ~/Desktop/Ward.app
+EOF
+fi
+
+case "${ACTION}" in
+    create)
+        # No -f, deliberately: plain `ln -s` refuses to clobber an existing
+        # path, so if anything raced into the destination between the decision
+        # above and here, this fails rather than overwriting it.
+        link_or_die ln -s "${WARD_APP}" "${LINK}"
+        echo "Linked ${LINK} -> ${WARD_APP}"
+        ;;
+    relink)
+        # -n matters: without it `ln` follows an existing symlink-to-directory
+        # and writes the new link *inside* the old target, leaving Ward.app
+        # linked where it was and a stray Ward.app/Ward.app behind it. Both BSD
+        # and GNU ln spell that flag -n.
+        link_or_die ln -sfn "${WARD_APP}" "${LINK}"
+        echo "Relinked ${LINK} -> ${WARD_APP}"
+        ;;
+    keep)
+        echo "${LINK} already points at this Ward."
+        ;;
+    *)
+        # Unreachable today. Worth writing anyway: a `case` that matches nothing
+        # is a silent no-op in bash, not an error `set -e` catches, so a future
+        # branch that set ACTION to a fourth value would fall straight through
+        # to "Opening Ward…" having linked nothing, and say so cheerfully.
+        die <<EOF
+internal error: unhandled action '${ACTION}'.
+Nothing was changed. Please report this.
+EOF
+        ;;
+esac
+
+echo "Opening Ward…"
+if ! "${OPEN_COMMAND}" "${LINK}"; then
+    die <<EOF
+could not open ${LINK} with '${OPEN_COMMAND}'.
+The link itself is in place, so opening Ward from Finder will still work.
+EOF
+fi

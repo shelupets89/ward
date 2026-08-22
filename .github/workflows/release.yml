@@ -75,13 +75,16 @@ jobs:
           ## Install
 
           ```bash
-          brew install shelupets89/ward/ward
+          brew install shelupets89/ward/ward && ward
           ```
 
-          This compiles Ward on your machine. Nothing is downloaded, so nothing is
-          quarantined, and there is no Gatekeeper dialog to get past. Homebrew prints
-          a `ln -s` line at the end to put it in `/Applications` — its sandbox is not
-          allowed to do that for you.
+          `ward` links it into `/Applications` and opens it, which Homebrew's own
+          sandbox is not allowed to do during the install.
+
+          Installing compiles Ward on your machine: nothing is downloaded, so nothing
+          is quarantined, and there is no Gatekeeper dialog to get past. Linking is a
+          separate command because Homebrew's own sandbox is not allowed to write to
+          `/Applications`.
 
           ## Or the download below
 

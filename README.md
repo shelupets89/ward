@@ -5,18 +5,24 @@ A macOS menu-bar utility for things macOS makes hard. No Dock icon, no window, n
 ## Install
 
 ```bash
-brew install shelupets89/ward/ward
+brew install shelupets89/ward/ward && ward
 ```
+
+`ward` is the second half because Homebrew's install sandbox is not permitted to write to `/Applications` — verified, not assumed, and there is no formula-side way around it. Chaining it onto the install makes that one line to paste rather than two things to do.
 
 This compiles Ward on your machine rather than downloading it. Nothing downloaded means nothing carries `com.apple.quarantine`, which is what makes macOS check an app with Gatekeeper when you open it — so there's no security dialog at any point. That matters here: Ward isn't notarized, and the dialog it would otherwise produce has no Open button. Needs Xcode Command Line Tools (`xcode-select --install`), and builds in well under a minute (about 10 seconds on Apple silicon).
 
-Homebrew's install sandbox isn't permitted to write to `/Applications`, so the last step is yours. `brew install` prints it when it finishes:
+Homebrew's install sandbox isn't permitted to write to `/Applications`, so the last step is a command of its own. `brew install` prints it when it finishes:
 
 ```bash
-ln -s "$(brew --prefix ward)/Ward.app" /Applications && open /Applications/Ward.app
+ward
 ```
 
+That links Ward into `/Applications` and opens it. Running it again is harmless: it re-opens Ward and says the link is already there. It won't touch an app it didn't put there — if you already have a `Ward.app` in `/Applications` from a DMG, it says so and stops rather than replacing it, because macOS holds that copy's permission grants separately.
+
 Use the full `shelupets89/ward/ward` name rather than tapping first and installing `ward` — Homebrew only auto-trusts a formula you name in full, and the short form is refused as coming from an untrusted tap.
+
+`brew uninstall ward` removes the app but not the link, leaving it dangling — `rm /Applications/Ward.app` clears it. (`caveats` says this too, but only at install time, which is not when you need it.)
 
 Update with `brew upgrade ward` — the symlink follows, so it's a one-time step. **The Accessibility grant does not survive an upgrade**: Ward is ad-hoc signed, every upgrade rebuilds it into a binary macOS considers a different app, and grants are tied to the binary. Cleaning Mode needs re-granting each time.
 

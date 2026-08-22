@@ -26,21 +26,36 @@ class Ward < Formula
     ENV["WARD_DISABLE_SWIFTPM_SANDBOX"] = "1"
     system "bash", "scripts/make-app.sh"
     prefix.install "dist/Ward.app"
+
+    # The .app cannot go in /Applications from here, and `bin` is the one
+    # directory Homebrew links onto PATH — so this shim is the whole of what an
+    # install is able to do to shorten the step it is not allowed to take.
+    bin.install "packaging/homebrew/ward"
+
+    # opt_prefix rather than prefix: the opt path does not move between
+    # versions, which is what lets the symlink the shim writes survive
+    # `brew upgrade` untouched. inreplace fails the build if the placeholder is
+    # gone, so a renamed token cannot ship a shim that links a literal
+    # __WARD_APP__ — and the test below covers the other direction.
+    inreplace bin/"ward", "__WARD_APP__", "#{opt_prefix}/Ward.app"
   end
 
-  # Homebrew's post-install sandbox cannot write to /Applications, and linking
-  # an app is not something a formula can express, so the symlink is the user's
-  # one manual step.
   def caveats
     <<~EOS
       Ward.app was compiled on this machine, so it carries no quarantine flag
-      and opens with no Gatekeeper dialog. Link it into /Applications:
+      and opens with no Gatekeeper dialog. One step left:
 
-        ln -s #{opt_prefix}/Ward.app /Applications
-        open /Applications/Ward.app
+        ward
 
-      The link tracks whichever version is current, so `brew upgrade ward`
-      needs no relink. `brew uninstall ward` leaves it dangling:
+      That links Ward into /Applications and opens it. It is a command rather
+      than part of the install because Homebrew's sandbox is not permitted to
+      write there. Running it again is harmless — it re-opens Ward and reports
+      the link is already in place, and it refuses to touch an app it did not
+      put there.
+
+      `brew upgrade ward` needs no relink: the link names a path that does not
+      move between versions. `brew uninstall ward` leaves it dangling, and
+      nothing else will clean it up:
 
         rm /Applications/Ward.app
 
@@ -71,5 +86,35 @@ class Ward < Formula
       "/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' #{app}/Contents/Info.plist",
     ).strip
     assert_equal version.to_s, bundle_version
+
+    # Two things already stand between a user and an unsubstituted shim:
+    # `inreplace` fails the build when the placeholder is not found, and the
+    # shim refuses to run while it still holds one — it dies at its own `-d`
+    # guard, exit 1, having linked nothing. Neither covers the file being
+    # rewritten or replaced *after* that step, which is the only route by which
+    # a placeholder could actually reach someone. That is what this catches.
+    refute_match "__WARD_APP__", (bin/"ward").read
+
+    # /Applications is off-limits in here for the same reason it is off-limits
+    # during install, so the link is proved against a scratch directory. The
+    # launcher is stubbed with `true`: `brew test` must not leave a menu-bar app
+    # running on the machine.
+    #
+    # scripts/ward-shim-tests.sh covers the branches this cannot reach — every
+    # refusal needs something already sitting in /Applications.
+    applications = testpath/"Applications"
+    applications.mkpath
+    linked = applications/"Ward.app"
+
+    with_env("WARD_APPLICATIONS_DIR" => applications.to_s, "WARD_OPEN_COMMAND" => "true") do
+      system bin/"ward"
+      assert_predicate linked, :symlink?
+      assert_equal "#{opt_prefix}/Ward.app", linked.readlink.to_s
+
+      # Idempotent, because caveats say running it again is harmless.
+      system bin/"ward"
+      assert_predicate linked, :symlink?
+      assert_equal "#{opt_prefix}/Ward.app", linked.readlink.to_s
+    end
   end
 end
