@@ -1,0 +1,92 @@
+/// What Ward does about a missing permission, in order, as a state machine with
+/// no side effects.
+///
+/// Both permission flows used to fire the system prompt and then open Ward's own
+/// alert, back to back. Two modals arrived at once and the system one — which
+/// can only say "Ward" — landed in front of the one naming the exact bundle and
+/// warning that a stale entry reads as enabled while granting nothing. On a
+/// machine where a `brew install` build and a local `make-app.sh` build coexist,
+/// that is the difference between granting the right app and flipping a switch
+/// that was already on.
+///
+/// The ordering lives here rather than in the code holding the AppKit calls, for
+/// the same reason `KillEscalation` does: it is the part that can be got wrong,
+/// so it is the part that should be testable. What makes the old bug
+/// unexpressible is `Stage` — no stage yields `.registerWithSystem` before an
+/// explanation has happened, so there is no way to ask for the system prompt
+/// first. Adding one would put the bug back.
+public enum PermissionEscalation {
+    public enum Stage: Equatable, Sendable {
+        /// Nothing has been shown yet. `isAlreadyGranted` is the preflight
+        /// answer — the non-prompting check, never the one that shows a dialog.
+        case notYetAsked(isAlreadyGranted: Bool)
+        /// Ward's alert has been read and dismissed.
+        case explained(userChoseSettings: Bool)
+    }
+
+    public enum Step: Equatable, Sendable {
+        /// Ward's own alert, which is the only one that can name the bundle.
+        case explain
+        /// The system prompt. Kept, and kept before the pane opens, because it
+        /// is understood to be what puts a row in the list for the user to
+        /// enable — the dialog it also shows is the cost of that, not the point
+        /// of it.
+        ///
+        /// "Understood to be", not measured: `TCC.db` is unreadable even with
+        /// `sudo` (`CLAUDE.md`), and confirming it would mean revoking a real
+        /// grant to watch the row vanish. It is why the call is moved rather
+        /// than deleted, which is the conservative reading either way.
+        case registerWithSystem
+        case openSettingsPane
+    }
+
+    /// Which grant is being escalated, and everything that differs between the
+    /// two because of it.
+    ///
+    /// The pane and the button title live here rather than at the call site
+    /// because the call site got to pair them itself, and nothing noticed when
+    /// it paired them wrongly: swapping the two URL constants sent a button
+    /// reading "Open Accessibility Settings" to the Input Monitoring pane, with
+    /// the whole suite green. Here the pairing is a value that can be asserted.
+    ///
+    /// `CaseIterable` so a test can be exhaustive over this for real, rather
+    /// than over a hand-typed list that a new case would never join.
+    public enum Grant: Equatable, Sendable, CaseIterable {
+        case accessibility
+        case inputMonitoring
+
+        public var settingsURLString: String {
+            switch self {
+            case .accessibility:
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            case .inputMonitoring:
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            }
+        }
+
+        public var settingsButtonTitle: String {
+            switch self {
+            case .accessibility:
+                return "Open Accessibility Settings"
+            case .inputMonitoring:
+                return "Open Input Monitoring Settings"
+            }
+        }
+    }
+
+    /// Deliberately returns the whole ordered list rather than one step at a
+    /// time. Registration and opening the pane are not separated by anything the
+    /// caller has to observe in between, and a caller asking twice could be
+    /// handed them in either order.
+    public static func nextSteps(_ stage: Stage) -> [Step] {
+        switch stage {
+        case .notYetAsked(let isAlreadyGranted):
+            return isAlreadyGranted ? [] : [.explain]
+        case .explained(let userChoseSettings):
+            // Cancelling is a complete answer, not a deferral: nothing is
+            // registered and nothing is opened. Ward has already said what to do
+            // and the user declined to do it now.
+            return userChoseSettings ? [.registerWithSystem, .openSettingsPane] : []
+        }
+    }
+}
